@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+sympy
+httpx2
+pytest
+requests
+python-dotenv

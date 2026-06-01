@@ -1,0 +1,25 @@
+version: "3.8"
+services:
+  calculator-api:
+    build:
+      context: ./rpi4
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - API_TOKEN=replace_with_secure_token
+    volumes:
+      - ./rpi4:/app
+
+  # caddy:
+  #   image: caddy:2
+  #   ports:
+  #     - "443:443"
+  #   volumes:
+  #     - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+  #     - caddy_data:/data
+  #     - caddy_config:/config
+
+#volumes:
+#  caddy_data:
+#  caddy_config:
