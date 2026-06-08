@@ -8,8 +8,8 @@ services:
       - "8000:8000"
     environment:
       - API_TOKEN=replace_with_secure_token
-    volumes:
-      - ./rpi4:/app
+  # volumes:
+  #   - ./rpi4:/app
 
   # caddy:
   #   image: caddy:2

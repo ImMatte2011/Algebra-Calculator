@@ -1,6 +1,6 @@
 from fastapi import Depends, Header, HTTPException
 from starlette.status import HTTP_401_UNAUTHORIZED
-from rpi4.config import CONFIG
+from config import CONFIG
 
 
 def verify_bearer_token(authorization: str = Header(None)):

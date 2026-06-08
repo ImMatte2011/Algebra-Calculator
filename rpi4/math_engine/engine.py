@@ -1,29 +1,31 @@
-from rpi4.math_engine import parser, solver
-from sympy import Integral, Derivative, simplify
+﻿from math_engine import parser, solver
 
-
-def solve_expression(expr_str: str) -> str:
-    parsed = parser.parse_input(expr_str)
+def solve_expression(expr_str: str, type_requested: str, action_requested: str = None, valore_x=None) -> str:
+    # 1. Chiama il tuo parser
+    parsed = parser.parse_input(expr_str, type_requested, action_requested)
     if "error" in parsed:
-        return f"error: {parsed['error']}"
+        return f"error:{parsed['error']}"
 
-    # Do not handle integrals or derivatives — reject explicitly
-    if parsed.get("type") == "expression":
-        expr = parsed.get("value")
-        try:
-            if expr.has(Integral) or expr.has(Derivative):
-                return "error: integrals and derivatives are not supported"
-            # prefer a simplified form for expressions
-            res = simplify(expr)
-            return str(res)
-        except Exception:
-            result = solver.risolvi(parsed)
-            if "error" in result:
-                return f"error: {result['error']}"
-            return str(result.get("sol"))
+    # 2. Inietta valore_x se presente (in questo modo separiamo il parsing puro dalle variabili extra)
+    if valore_x is not None:
+        parsed["valore_x"] = valore_x
 
-    # For equations/inequalities, use the solver and stringify
+    # 3. Passa il dizionario al tuo solver
     result = solver.risolvi(parsed)
     if "error" in result:
-        return f"error: {result['error']}"
-    return str(result.get("sol"))
+        return f"error:{result['error']}"
+
+    # 4. Estrazione del dato "sol" e pulizia per l'hardware dell'ESP32
+    soluzione = result.get("sol")
+    
+    if isinstance(soluzione, dict):
+        # Caso tipo "expression" (ha le chiavi "res" ed eventualmente "evaluated")
+        output = str(soluzione.get("res", ""))
+        if "evaluated" in soluzione:
+            output += f"={soluzione['evaluated']}"
+    else:
+        # Caso equazioni/disequazioni (SymPy restituisce Set, es: FiniteSet(2) o {2})
+        # Rimuoviamo la dicitura del tipo di oggetto e le graffe per non sporcare l'LCD
+        output = str(soluzione).replace("FiniteSet", "").replace("{", "").replace("}", "")
+
+    return f"result:{output}"
