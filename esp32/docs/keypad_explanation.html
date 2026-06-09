@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guida Doppio Shift - ESP32 Calc</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            background-color: #f4f7f6;
+            color: #333;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #34495e; padding-bottom: 10px; }
+        h2 { color: #2980b9; margin-top: 30px; }
+        code { background: #e0e0e0; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 14px; }
+        .status-badge {
+            background-color: #34495e; color: #fff; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-family: monospace;
+        }
+        table {
+            width: 100%; border-collapse: collapse; margin: 15px 0; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-radius: 6px; overflow: hidden;
+        }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #edf2f7; }
+        th { background-color: #f7fafc; color: #4a5568; font-weight: 600; }
+        tr:hover { background-color: #f8fafc; }
+        .shift-a-title { color: #27ae60; }
+        .shift-b-title { color: #2980b9; }
+        .highlight { font-weight: bold; color: #e74c3c; }
+    </style>
+</head>
+<body>
+
+    <h1>🧮 Sistema a Doppio SHIFT - Calcolatrice ESP32</h1>
+    <p>La tastiera è stata configurata per supportare due stati di Shift indipendenti tramite i tasti fisici <code>*</code> e <code>#</code>, massimizzando il numero di caratteri inseribili.</p>
+
+    <h2>🧭 Indicatori di Stato sul Display LCD</h2>
+    <ul>
+        <li><strong>Nessun indicatore:</strong> Modalità Primaria (Cifre standard)</li>
+        <li><span class="status-badge">[SH-A]</span> <strong>Shift A Attivo:</strong> Operatori matematici, parentesi e incognita <code>x</code>.</li>
+        <li><span class="status-badge">[SH-B]</span> <strong>Shift B Attivo:</strong> Frecce di navigazione del cursore e confronti.</li>
+    </ul>
+
+    <h2 class="shift-a-title">🟢 1. Mappa SHIFT A (Attivata con il tasto `*`)</h2>
+    <p>Utilizzata per inserire la struttura logica e algebrica delle espressioni.</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Tasto Fisico</th>
+                <th>Carattere Output</th>
+                <th>Descrizione</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td><strong>K_1</strong></td><td><span class="highlight">(</span></td><td>Parentesi Tonda Aperta</td></tr>
+            <tr><td><strong>K_2</strong></td><td><span class="highlight">)</span></td><td>Parentesi Tonda Chiusa</td></tr>
+            <tr><td><strong>K_3</strong></td><td><strong>+</strong></td><td>Operatore Più</td></tr>
+            <tr><td><strong>K_4</strong></td><td><strong>-</strong></td><td>Operatore Meno</td></tr>
+            <tr><td><strong>K_5</strong></td><td><strong>*</strong></td><td>Moltiplicazione</td></tr>
+            <tr><td><strong>K_6</strong></td><td><strong>/</strong></td><td>Divisione</td></tr>
+            <tr><td><strong>K_7</strong></td><td><strong>^</strong></td><td>Potenza</td></tr>
+            <tr><td><strong>K_8</strong></td><td><span class="highlight">x</span></td><td><strong>Incognita Algebrica 'x'</strong></td></tr>
+            <tr><td><strong>K_STAR (*)</strong></td><td><code>Disattiva</code></td><td>Ritorna alla modalità numerica normale</td></tr>
+            <tr><td><strong>K_POUND (#)</strong></td><td><code>Salta a B</code></td><td>Passa direttamente a Shift B</td></tr>
+        </tbody>
+    </table>
+
+    <h2 class="shift-b-title">🔵 2. Mappa SHIFT B (Attivata con il tasto `#`)</h2>
+    <p>Utilizzata per muovere il cursore nel testo e scrivere equazioni o relazioni di confronto.</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Tasto Fisico</th>
+                <th>Comando / Output</th>
+                <th>Descrizione</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td><strong>K_1</strong></td><td><span class="highlight">FRETCCIA SX</span></td><td>⬅️ Sposta il cursore a sinistra di 1 spaziuo</td></tr>
+            <tr><td><strong>K_2</strong></td><td><span class="highlight">FRECCIA DX</span></td><td>➡️ Sposta il cursore a destra di 1 spazio</td></tr>
+            <tr><td><strong>K_3</strong></td><td><span>FRECCIA SU</span></td><td>⬆️ Navigazione Menu</td></tr>
+            <tr><td><strong>K_4</strong></td><td><span>FRECCIA GIÙ</span></td><td>⬇️ Navigazione Menu</td></tr>
+            <tr><td><strong>K_5</strong></td><td><strong>&gt;</strong></td><td>Maggiore</td></tr>
+            <tr><td><strong>K_6</strong></td><td><strong>&lt;</strong></td><td>Minore</td></tr>
+            <tr><td><strong>K_7</strong></td><td><strong>&gt;=</strong></td><td>Maggiore o Uguale</td></tr>
+            <tr><td><strong>K_8</strong></td><td><strong>&lt;=</strong></td><td>Minore o Uguale</td></tr>
+            <tr><td><strong>K_9</strong></td><td><strong>!=</strong></td><td>Diverso</td></tr>
+            <tr><td><strong>K_0</strong></td><td><strong>=</strong></td><td>Uguale logico</td></tr>
+            <tr><td><strong>K_STAR (*)</strong></td><td><code>Salta ad A</code></td><td>Passa direttamente a Shift A</td></tr>
+            <tr><td><strong>K_POUND (#)</strong></td><td><code>Disattiva</code></td><td>Ritorna alla modalità numerica normale</td></tr>
+        </tbody>
+    </table>
+
+</body>
+</html>
