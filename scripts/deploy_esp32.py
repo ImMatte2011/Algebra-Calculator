@@ -1,6 +1,7 @@
 """Generate `esp32/settings.py` from a .env file for flashing the ESP32.
 
 Usage:
+    cd <project-root>
     python scripts/deploy_esp32.py --env .env.esp32 --out esp32/settings.py
 
 This reads KEY=VALUE pairs (ignoring comments) and writes a small Python

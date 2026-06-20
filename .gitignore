@@ -16,7 +16,13 @@ venv/
 # IDE
 .vscode/
 .idea/
+build/
+.apk
 
 # OS
 .DS_Store
 Thumbs.db
+
+# File temporanei
+temp/
+.temp
