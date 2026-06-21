@@ -92,7 +92,7 @@ class BLEBridge:
 
         elif event == self._IRQ_GATTS_WRITE:
             self.last_activity = time.time()
-            conn_handle, value_handle = data
+            _, value_handle = data
             if value_handle == self.expr_handle:
                 try:
                     payload = self.ble.gatts_read(self.expr_handle)
@@ -127,14 +127,16 @@ class BLEBridge:
         return self.conn_handle is not None
 
     def send_result(self, result_str):
-        if self.conn_handle is not None:
-            try:
-                data = result_str.encode('utf-8')
-                self.ble.gatts_write(self.result_handle, data)
-                self.ble.gatts_notify(self.conn_handle, self.result_handle, data)
-                self.last_activity = time.time()
-                logger.info(f"Notifica inviata: {result_str}")
-            except Exception as e:
-                print("Errore invio BLE:", e)
-        else:
-            print("BLE non connesso, salto invio")
+        if self.conn_handle is None:
+            logger.info("BLE not connected, skip send")
+            return
+
+        try:
+            data = result_str.encode("utf-8")
+            self.ble.gatts_write(self.result_handle, data)
+            self.ble.gatts_notify(self.conn_handle, self.result_handle, data)
+            self.last_activity = time.time()
+            logger.info("BLE notification sent: %s", result_str)
+        except Exception as e:
+            logger.warning("BLE send error: %s", e)
+            self._clear_connection_state("BLE send failed, internal disconnect")

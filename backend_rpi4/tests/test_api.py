@@ -1,5 +1,11 @@
+import os
 import sys
 from pathlib import Path
+
+# Tests exercise the API directly (not through Caddy/Tailscale), so we force
+# ACCESS_MODE=tailscale here to skip the Bearer token check. Token
+# enforcement itself is covered separately in test_auth.py.
+os.environ.setdefault("ACCESS_MODE", "tailscale")
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:

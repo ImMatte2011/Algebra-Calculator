@@ -1,10 +1,11 @@
 ﻿from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
 from math_engine.engine import solve_expression
 from utils.logger import info
+from utils.validators import verify_bearer_token
 
 app = FastAPI(title="Calc Algebraica API")
 
@@ -41,7 +42,7 @@ def shutdown_event():
 
 
 @app.post("/solve", response_model=SolveResponse)
-def solve(request: SolveRequest):
+def solve(request: SolveRequest, token: str = Depends(verify_bearer_token)):
     if not is_active:
         raise HTTPException(status_code=403, detail="Service is inactive")
 
@@ -50,7 +51,7 @@ def solve(request: SolveRequest):
         request.type,
         request.action
     )
-    
+
     if result is None or result.startswith("error:"):
         raise HTTPException(status_code=400, detail=result or "Unable to solve expression")
 
@@ -58,12 +59,12 @@ def solve(request: SolveRequest):
 
 
 @app.post("/toggle", response_model=StatusResponse)
-def toggle(request: ToggleRequest):
+def toggle(request: ToggleRequest, token: str = Depends(verify_bearer_token)):
     global is_active
     is_active = request.active
     return StatusResponse(is_active=is_active)
 
 
 @app.get("/status", response_model=StatusResponse)
-def status():
+def status(token: str = Depends(verify_bearer_token)):
     return StatusResponse(is_active=is_active)

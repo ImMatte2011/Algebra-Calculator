@@ -1,18 +1,23 @@
-Contributing
+# Contributing
 
-Thanks for contributing! Guidelines:
+## Project Status
 
-- Code style: follow existing project conventions. Keep changes minimal and focused.
-- Tests: add pytest tests under `rpi4/tests` (use existing tests as examples).
-- Linting: run `ruff`/`flake8` if available in your environment.
-- Commits: use small descriptive commits. Open a PR against `main` or `develop` branch.
-- CI: PRs should run tests automatically (add GitHub Actions workflow later).
-- ESP32: hardware-specific changes should be tested on device or with mocks. Use `scripts/deploy_esp32.py` to generate `esp32/settings.py` for flashing.
+This repository is published for portfolio and demonstration purposes.
 
-Process:
-1. Fork the repo.
-2. Create a feature branch.
-3. Add tests and documentation for your change.
-4. Open a PR and request review.
+Its primary goal is to document the development of the project, showcase its architecture, and provide a record of the work carried out over time.
 
-Contact: open an issue if you're unsure where to start.
+The source code is publicly visible, but it is **not open source**. All rights are reserved by the author as specified in the LICENSE file.
+
+## Contributions
+
+At this time, external contributions, pull requests, forks intended for redistribution, or derivative works are not being accepted.
+
+Development is currently maintained by a single author.
+
+## Feedback
+
+Bug reports, suggestions, and technical discussions are welcome through the Issues section. Constructive feedback is always appreciated and may help improve future versions of the project.
+
+## Notes
+
+The public availability of this repository does not grant permission to copy, redistribute, modify, or reuse the source code beyond what is explicitly permitted by the project's license.
