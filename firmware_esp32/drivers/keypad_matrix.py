@@ -1,21 +1,9 @@
 import time
 from machine import Pin
 from config import CONFIG
+from drivers.keypad_base import KeypadBase, KeypadAction
 
-class KeypadAction:
-    ENTER = "ENTER"
-    BACKSPACE = "BACKSPACE"
-    DELETE = "DELETE"
-    SHIFT = "SHIFT"
-    CLEAR = "CLEAR"
-    LEFT = "LEFT"
-    RIGHT = "RIGHT"
-    UP = "UP"
-    DOWN = "DOWN"
-    SHIFT_A = "CMD_SHIFT_A"
-    SHIFT_B = "CMD_SHIFT_B"
-
-class KeypadAbstract:
+class KeypadMatrix(KeypadBase):
     """Astrazione del tastierino matriciale con modalità SHIFT_A / SHIFT_B e debounce."""
 
     DEFAULT_KEY_MATRIX = [

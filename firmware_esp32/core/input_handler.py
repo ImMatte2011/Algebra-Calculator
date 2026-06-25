@@ -1,4 +1,4 @@
-from drivers.keypad_abstract import KeypadAction
+from drivers.keypad_base import KeypadAction
 
 
 class InputHandler:

@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Macropad BLE — Mappa Tasti</title>
+    <style>
+        :root {
+            --bg: #0e0e12;
+            --panel: #18181f;
+            --border: #2a2a38;
+            --accent: #7c6dfa;
+            --accent2: #fa6d8a;
+            --accent3: #6dfabc;
+            --text: #e8e8f0;
+            --muted: #6b6b88;
+            --key-bg: #22222e;
+            --key-border: #35354a;
+            --key-shadow: #0a0a0f;
+            --layer-h: 38px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            min-height: 100vh;
+            padding: 32px 24px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        header h1 {
+            font-size: 1.1rem;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--muted);
+            font-weight: 400;
+            margin-bottom: 6px;
+        }
+        header h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: -0.02em;
+        }
+        header p {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+        }
+
+        /* Layer tabs */
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 28px;
+        }
+        .tab {
+            padding: 8px 24px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--muted);
+            font-family: inherit;
+            font-size: 0.78rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .tab:hover { color: var(--text); border-color: var(--accent); }
+        .tab.active-l1 { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .tab.active-l2 { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+        .tab.active-l3 { background: var(--accent3); color: #000; border-color: var(--accent3); }
+
+        /* Main layout */
+        .layout {
+            display: flex;
+            gap: 32px;
+            justify-content: center;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        /* Keypad grid */
+        .keypad-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .keypad-label {
+            font-size: 0.7rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(4, 72px);
+            gap: 8px;
+            background: var(--panel);
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+        .key {
+            height: 64px;
+            border-radius: 8px;
+            background: var(--key-bg);
+            border: 1px solid var(--key-border);
+            box-shadow: 0 3px 0 var(--key-shadow);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text);
+            position: relative;
+            transition: transform 0.08s, box-shadow 0.08s;
+            cursor: default;
+            user-select: none;
+        }
+        .key:hover { transform: translateY(-1px); box-shadow: 0 4px 0 var(--key-shadow); }
+        .key .physical {
+            position: absolute;
+            top: 4px; left: 6px;
+            font-size: 0.55rem;
+            color: var(--muted);
+            font-weight: 400;
+        }
+        .key .sub {
+            font-size: 0.6rem;
+            color: var(--muted);
+            font-weight: 400;
+        }
+
+        /* Key color variants */
+        .key.num   { background: #1e1e2e; }
+        .key.op    { background: #1e1e2a; border-color: #3a3a58; color: var(--accent); }
+        .key.cmd   { background: #1e1a1e; border-color: #3a2838; color: var(--accent2); }
+        .key.nav   { background: #1a1e1e; border-color: #28383a; color: var(--accent3); }
+        .key.fn    { background: #1e1e1a; border-color: #38381a; color: #fad96d; }
+        .key.empty { opacity: 0.2; }
+        .key.layer { border-color: var(--accent); background: #1a1a2e; }
+
+        /* Knobs section */
+        .knobs-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: var(--panel);
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            min-width: 200px;
+        }
+        .knobs-title {
+            font-size: 0.7rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--muted);
+            text-align: center;
+            margin-bottom: 4px;
+        }
+        .knob-row {
+            display: grid;
+            grid-template-columns: 56px 1fr;
+            align-items: center;
+            gap: 10px;
+        }
+        .knob-svg {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+        .knob-svg svg { display: block; }
+        .knob-label { font-size: 0.6rem; color: var(--muted); text-align: center; }
+        .knob-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .knob-action {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+        }
+        .knob-icon {
+            width: 20px;
+            text-align: center;
+            font-size: 0.75rem;
+        }
+        .knob-value {
+            color: var(--text);
+            font-weight: 600;
+        }
+        .knob-value.nav-c  { color: var(--accent3); }
+        .knob-value.cmd-c  { color: var(--accent2); }
+        .knob-value.fn-c   { color: #fad96d; }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 32px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.7rem;
+            color: var(--muted);
+        }
+        .legend-dot {
+            width: 10px; height: 10px;
+            border-radius: 2px;
+        }
+
+        /* Layer 3 note */
+        .note {
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.72rem;
+            margin-top: 12px;
+            max-width: 520px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+        .note code {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            padding: 1px 5px;
+            border-radius: 3px;
+            color: #fad96d;
+            font-family: inherit;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>MINI-KEYBOARD BLE — E0:0F:7A:C3:C9:DF</h1>
+    <h2>Mappa Tasti Macropad</h2>
+    <p>4×4 grid · 3 knob rotary · 3 layer · firmware Calc Algebraica</p>
+</header>
+
+<div class="tabs">
+    <button class="tab active-l1" onclick="setLayer(1, this)">Layer 1 — Numeri</button>
+    <button class="tab" onclick="setLayer(2, this)">Layer 2 — Operatori</button>
+    <button class="tab" onclick="setLayer(3, this)">Layer 3 — Azioni</button>
+</div>
+
+<div class="layout">
+    <div class="keypad-wrap">
+        <div class="keypad-label">Griglia 4×4</div>
+        <div class="keypad" id="keypad"></div>
+    </div>
+    <div class="knobs-wrap">
+        <div class="knobs-title">Knob rotary</div>
+
+        <div class="knob-row">
+            <div class="knob-svg">
+                <svg width="48" height="48" viewBox="0 0 48 48">
+                    <circle cx="24" cy="24" r="20" fill="#22222e" stroke="#35354a" stroke-width="1.5"/>
+                    <circle cx="24" cy="24" r="10" fill="#18181f" stroke="#3a3a58" stroke-width="1"/>
+                    <text x="24" y="28" text-anchor="middle" fill="#7c6dfa" font-size="10" font-family="monospace" font-weight="bold">K1</text>
+                </svg>
+                <div class="knob-label">Knob 1</div>
+            </div>
+            <div class="knob-actions">
+                <div class="knob-action"><span class="knob-icon">↻</span> <span class="knob-value nav-c">frc_destra</span></div>
+                <div class="knob-action"><span class="knob-icon">↺</span> <span class="knob-value nav-c">frc_sinistra</span></div>
+                <div class="knob-action"><span class="knob-icon">●</span> <span class="knob-value cmd-c">DELETE</span></div>
+            </div>
+        </div>
+
+        <div class="knob-row">
+            <div class="knob-svg">
+                <svg width="48" height="48" viewBox="0 0 48 48">
+                    <circle cx="24" cy="24" r="20" fill="#22222e" stroke="#35354a" stroke-width="1.5"/>
+                    <circle cx="24" cy="24" r="10" fill="#18181f" stroke="#3a3a58" stroke-width="1"/>
+                    <text x="24" y="28" text-anchor="middle" fill="#7c6dfa" font-size="10" font-family="monospace" font-weight="bold">K2</text>
+                </svg>
+                <div class="knob-label">Knob 2</div>
+            </div>
+            <div class="knob-actions">
+                <div class="knob-action"><span class="knob-icon">↻</span> <span class="knob-value nav-c">frc_giù</span></div>
+                <div class="knob-action"><span class="knob-icon">↺</span> <span class="knob-value nav-c">frc_su</span></div>
+                <div class="knob-action"><span class="knob-icon">●</span> <span class="knob-value cmd-c">BACKSPACE</span></div>
+            </div>
+        </div>
+
+        <div class="knob-row">
+            <div class="knob-svg">
+                <svg width="48" height="48" viewBox="0 0 48 48">
+                    <circle cx="24" cy="24" r="20" fill="#22222e" stroke="#35354a" stroke-width="1.5"/>
+                    <circle cx="24" cy="24" r="10" fill="#18181f" stroke="#3a3a58" stroke-width="1"/>
+                    <text x="24" y="28" text-anchor="middle" fill="#7c6dfa" font-size="10" font-family="monospace" font-weight="bold">K3</text>
+                </svg>
+                <div class="knob-label">Knob 3</div>
+            </div>
+            <div class="knob-actions">
+                <div class="knob-action"><span class="knob-icon">↻</span> <span class="knob-value" style="color:var(--muted)">— (layer hw)</span></div>
+                <div class="knob-action"><span class="knob-icon">↺</span> <span class="knob-value" style="color:var(--muted)">— (layer hw)</span></div>
+                <div class="knob-action"><span class="knob-icon">●</span> <span class="knob-value cmd-c">CLEAR</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="note" id="note">
+    Layer 1 — tasti di uso quotidiano: numeri, operatori aritmetici base, incognita <code>x</code> e ENTER.
+</div>
+
+<div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#1e1e2e;border:1px solid #35354a"></div> Numeri</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1e1e2a;border:1px solid #3a3a58"></div> Operatori</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1e1a1e;border:1px solid #3a2838"></div> Comandi</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1a1e1e;border:1px solid #28383a"></div> Navigazione</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1e1e1a;border:1px solid #38381a"></div> Azioni (F13-F18)</div>
+</div>
+
+<script>
+const layers = {
+    1: {
+        note: "Layer 1 — tasti di uso quotidiano: numeri, operatori aritmetici base, incognita <code>x</code> e ENTER.",
+        keys: [
+            { label:"7",    type:"num",  phys:"1" },
+            { label:"8",    type:"num",  phys:"2" },
+            { label:"9",    type:"num",  phys:"3" },
+            { label:"+",    type:"op",   phys:"A" },
+            { label:"4",    type:"num",  phys:"4" },
+            { label:"5",    type:"num",  phys:"5" },
+            { label:"6",    type:"num",  phys:"6" },
+            { label:"−",    type:"op",   phys:"B" },
+            { label:"1",    type:"num",  phys:"7" },
+            { label:"2",    type:"num",  phys:"8" },
+            { label:"3",    type:"num",  phys:"9" },
+            { label:"/",    type:"op",   phys:"C" },
+            { label:"ENTER",type:"cmd",  phys:"*" },
+            { label:"0",    type:"num",  phys:"0" },
+            { label:"x",    type:"op",   phys:"#" },
+            { label:"×",    type:"op",   phys:"D" },
+        ]
+    },
+    2: {
+        note: "Layer 2 — operatori avanzati, frecce di navigazione cursore, simboli per equazioni e disequazioni.",
+        keys: [
+            { label:"^",    type:"op",  phys:"1" },
+            { label:"√",    type:"op",  phys:"2", sub:"radice" },
+            { label:"(",    type:"op",  phys:"3" },
+            { label:")",    type:"op",  phys:"A" },
+            { label:"<",    type:"op",  phys:"4" },
+            { label:">",    type:"op",  phys:"5" },
+            { label:"≤",    type:"op",  phys:"6" },
+            { label:"≥",    type:"op",  phys:"B" },
+            { label:"≠",    type:"op",  phys:"7" },
+            { label:"=",    type:"op",  phys:"8" },
+            { label:"",     type:"empty",phys:"9" },
+            { label:"",     type:"empty",phys:"C" },
+            { label:"←",    type:"nav", phys:"*" },
+            { label:"→",    type:"nav", phys:"0" },
+            { label:"↑",    type:"nav", phys:"#" },
+            { label:"↓",    type:"nav", phys:"D" },
+        ]
+    },
+    3: {
+        note: "Layer 3 — azioni matematiche mappate su F13–F18 (<code>0x68</code>–<code>0x6D</code>). L'ESP32 le intercetta in <code>keypad_ble_hid.py</code> e le converte in <code>KeypadAction</code> senza ambiguità con i caratteri normali.",
+        keys: [
+            { label:"simplify", type:"fn", phys:"1", sub:"F13" },
+            { label:"expand",   type:"fn", phys:"2", sub:"F14" },
+            { label:"factor",   type:"fn", phys:"3", sub:"F15" },
+            { label:"",         type:"empty", phys:"A" },
+            { label:"equation", type:"fn", phys:"4", sub:"F16" },
+            { label:"inequal.", type:"fn", phys:"5", sub:"F17" },
+            { label:"expr.",    type:"fn", phys:"6", sub:"F18" },
+            { label:"",         type:"empty", phys:"B" },
+            { label:"",         type:"empty", phys:"7" },
+            { label:"",         type:"empty", phys:"8" },
+            { label:"",         type:"empty", phys:"9" },
+            { label:"",         type:"empty", phys:"C" },
+            { label:"ESC",      type:"cmd", phys:"*" },
+            { label:"",         type:"empty", phys:"0" },
+            { label:"",         type:"empty", phys:"#" },
+            { label:"",         type:"empty", phys:"D" },
+        ]
+    }
+};
+
+let currentLayer = 1;
+
+function setLayer(n, btn) {
+    currentLayer = n;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active-l1','active-l2','active-l3'));
+    btn.classList.add(`active-l${n}`);
+    render();
+}
+
+function render() {
+    const data = layers[currentLayer];
+    const kp = document.getElementById('keypad');
+    kp.innerHTML = '';
+    data.keys.forEach(k => {
+        const div = document.createElement('div');
+        div.className = `key ${k.type}`;
+        div.innerHTML = `<span class="physical">${k.phys}</span>${k.label}${k.sub ? `<span class="sub">${k.sub}</span>` : ''}`;
+        kp.appendChild(div);
+    });
+    document.getElementById('note').innerHTML = data.note;
+}
+
+render();
+</script>
+</body>
+</html>
