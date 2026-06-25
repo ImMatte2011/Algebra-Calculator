@@ -6,7 +6,16 @@ server FastAPI su Raspberry Pi 4 (nel mio caso) dove SymPy risolve equazioni,
 disequazioni ed espressioni.
 
 ```
-ESP32 (tastiera + LCD) --BLE--> Telefono (bridge) --HTTPS--> FastAPI (RPi4) --> SymPy
+ESP32 (tastiera + LCD)
+       │  BLE
+       ▼
+App Android (bridge)
+       │  HTTP/HTTPS
+       ▼
+RPi (FastAPI + SymPy)
+       │  (risposta)
+       ▼
+App Android ──► ESP32 (display)
 ```
 
 > Progetto personale, ancora in sviluppo attivo — vedi
@@ -17,6 +26,7 @@ ESP32 (tastiera + LCD) --BLE--> Telefono (bridge) --HTTPS--> FastAPI (RPi4) --> 
 
 ```
 .
+├── android-app/         # App Android bridge BLE ↔ HTTP (Kotlin + Compose)
 ├── backend_rpi4/         # Server FastAPI + motore algebrico (SymPy)
 ├── firmware_esp32/       # Firmware MicroPython per l'ESP32
 ├── caddy/                # Configurazione reverse proxy HTTPS
@@ -26,7 +36,7 @@ ESP32 (tastiera + LCD) --BLE--> Telefono (bridge) --HTTPS--> FastAPI (RPi4) --> 
 └── requirements.txt
 ```
 
-Dettaglio completo cartella per cartella: [docs/structure.md](docs/structure.md)
+Dettaglio completo: [docs/structure.md](docs/structure.md)
 
 ## Documentazione
 
@@ -39,7 +49,8 @@ Dettaglio completo cartella per cartella: [docs/structure.md](docs/structure.md)
 - **Setup completo passo-passo**: [docs/setup_and_configure.md](docs/setup_and_configure.md)
 - **Struttura del progetto**: [docs/structure.md](docs/structure.md)
 
-## Quick start (server)
+## Quick start
+### Server (RPi)
 
 ```bash
 python -m venv .venv
@@ -47,10 +58,20 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env               # poi imposta API_TOKEN e ACCESS_MODE
 uvicorn backend_rpi4.main:app --reload --host 127.0.0.1 --port 8000
+# Esegui i tests per verificare il corretto funzionamento del server
+pytest backend_rpi4/tests -q
 ```
 
+### App Android
+
+Apri `android-app/` in Android Studio. Alla prima apertura dell'app configura
+dalla schermata impostazioni: indirizzo MAC dell'ESP32, URL del Raspberry Pi
+(con porta), e il token API se il server gira con `ACCESS_MODE=public`.
+
 ```bash
-pytest backend_rpi4/tests -q
+cd android-app
+./gradlew testDebugUnitTest   # unit test (JVM, no emulatore)
+./gradlew lintDebug
 ```
 
 ## Accesso: pubblico vs Tailscale
@@ -59,12 +80,10 @@ Il server supporta due modalità di esposizione alternative, scelte tramite
 la variabile d'ambiente `ACCESS_MODE` (vedi [docs/deploy.md](docs/deploy.md)
 per i dettagli):
 
-- `ACCESS_MODE=public` *(default)* — il Pi è raggiungibile da Internet
-  dietro Caddy su `:443`. Il Bearer token (`API_TOKEN`) è **obbligatorio**
-  su ogni richiesta.
-- `ACCESS_MODE=tailscale` — il Pi è raggiungibile solo dalla tua tailnet
-  Tailscale, che fa già da perimetro di accesso. Il token non viene
-  verificato.
+| `ACCESS_MODE` | Infrastruttura | Token obbligatorio |
+|---|---|---|
+| `public` *(default)* | Caddy su `:443`, IP pubblico + DuckDNS | Sì (`API_TOKEN`) |
+| `tailscale` | Solo dentro la tailnet Tailscale | No |
 
 ## Licenza
 

@@ -26,3 +26,6 @@ Thumbs.db
 # File temporanei
 temp/
 .temp
+
+# File di sviluppo
+todo-list.txt

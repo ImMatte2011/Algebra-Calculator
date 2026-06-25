@@ -1,0 +1,8 @@
+# Copia questo file in local.properties e compilalo con i tuoi valori.
+# NON committare local.properties (è in .gitignore).
+
+# Percorso all'Android SDK sul tuo sistema
+# Windows: sdk.dir=C\:\\Users\\<utente>\\AppData\\Local\\Android\\Sdk
+# macOS:   sdk.dir=/Users/<utente>/Library/Android/sdk
+# Linux:   sdk.dir=/home/<utente>/Android/Sdk
+sdk.dir=
