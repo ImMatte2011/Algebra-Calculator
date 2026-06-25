@@ -1,10 +1,22 @@
 import time
 from config import CONFIG
 from drivers.lcd_display import LCDDisplay
-from drivers.keypad_abstract import KeypadAbstract, KeypadAction
 from drivers.display_scroller import TextScroller
 from core.input_handler import InputHandler
 from ble.ble_bridge import BLEBridge
+
+if CONFIG["KEYPAD_TYPE"] == "ble_hid":
+    from drivers.keypad_ble_hid import KeypadBleHid
+    from ble.ble_mode_manager import BleModeManager
+    keypad = KeypadBleHid()
+    mode_manager = BleModeManager(ble, keypad)
+elif CONFIG["KEYPAD_TYPE"] == "matrix":
+    from drivers.keypad_matrix import KeypadMatrix
+    keypad = KeypadMatrix(...)
+    mode_manager = None
+else:
+    raise ValueError("CONFIG['KEYPAD_TYPE'] deve essere 'ble_hid' | 'matrix'")
+
 
 def pad_right(text: str, width: int) -> str:
     if len(text) >= width:
