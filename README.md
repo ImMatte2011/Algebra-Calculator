@@ -6,7 +6,7 @@ server FastAPI su Raspberry Pi 4 (nel mio caso) dove SymPy risolve equazioni,
 disequazioni ed espressioni.
 
 ```
-ESP32 (tastiera + LCD)
+ESP32 (tastiera + display)
        │  BLE
        ▼
 App Android (bridge)
@@ -42,9 +42,8 @@ Dettaglio completo: [docs/structure.md](docs/structure.md)
 
 - **Server (RPi4 / FastAPI)**: [docs/server.md](docs/server.md)
 - **Impostazioni ESP32**: [docs/esp32_settings.md](docs/esp32_settings.md)
-- **Tastiera ESP32 (doppio SHIFT)**: [firmware_esp32/docs/README_KEYPAD.md](firmware_esp32/docs/README_KEYPAD.md)
 - **Architettura di rete e sicurezza**: [docs/network.md](docs/network.md)
-- **Bridge telefono Android**: [docs/phone_bridge.md](docs/phone_bridge.md)
+- **Bridge telefono Android**: [docs/android_app.md](docs/android_app.md)
 - **Deploy e sicurezza (Caddy, Docker, accesso pubblico vs Tailscale)**: [docs/deploy.md](docs/deploy.md)
 - **Setup completo passo-passo**: [docs/setup_and_configure.md](docs/setup_and_configure.md)
 - **Struttura del progetto**: [docs/structure.md](docs/structure.md)

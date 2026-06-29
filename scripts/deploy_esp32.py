@@ -2,7 +2,7 @@
 
 Usage:
     cd <project-root>
-    python scripts/deploy_esp32.py --env .env.esp32 --out esp32/settings.py
+    python scripts/deploy_esp32.py --env .env.esp32 --out firmware_esp32/settings.py
 
 This reads KEY=VALUE pairs (ignoring comments) and writes a small Python
 module with assignments suitable to copy to the device (MicroPython).
@@ -45,7 +45,7 @@ def pythonize(value):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--env", default=".env.esp32", help="Path to env file")
-    p.add_argument("--out", default="esp32/settings.py", help="Output settings.py path")
+    p.add_argument("--out", default="firmware_esp32/settings.py", help="Output settings.py path")
     args = p.parse_args()
 
     env_path = Path(args.env)

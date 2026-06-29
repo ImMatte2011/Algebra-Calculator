@@ -1,4 +1,3 @@
-# from ... import text    <- import dell'espressione dal file che riceve l'input da esp32
 from sympy.parsing.sympy_parser import (
     parse_expr,
     standard_transformations,
@@ -12,10 +11,10 @@ trans = standard_transformations + (
 )
 ops = [">=", "<=", ">", "<"]
 ops_map = {
-    ">": ("gt", lambda a, b: a > b),
-    "<": ("lt", lambda a, b: a < b),
-    ">=": ("ge", lambda a, b: a >= b),
-    "<=": ("le", lambda a, b: a <= b),
+    ">":  "gt",
+    "<":  "lt",
+    ">=": "ge",
+    "<=": "le",
 }
 
 def parse_input(text, type_requested, action_requested=None, valore_x=None):
@@ -37,7 +36,7 @@ def parse_input(text, type_requested, action_requested=None, valore_x=None):
                     sx = parse_expr(sx, transformations=trans)
                     dx = parse_expr(dx, transformations=trans)
 
-                    op_name, _ = ops_map[op] # op_func non usata qui, ma potrebbe essere utile in futuro
+                    op_name = ops_map[op]
 
                     return {
                         "type": "inequality",

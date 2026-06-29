@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [ main ]
+    paths: [ "backend_rpi4/**", "requirements.txt", "pytest.ini" ]
   pull_request:
     branches: [ main ]
+    paths: [ "backend_rpi4/**", "requirements.txt", "pytest.ini" ]
 
 jobs:
   test:

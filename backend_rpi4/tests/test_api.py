@@ -2,9 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-# Tests exercise the API directly (not through Caddy/Tailscale), so we force
-# ACCESS_MODE=tailscale here to skip the Bearer token check. Token
-# enforcement itself is covered separately in test_auth.py.
+# Tests run without Caddy/Tailscale, skip token check
 os.environ.setdefault("ACCESS_MODE", "tailscale")
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,48 +17,48 @@ except ModuleNotFoundError:
     from rpi4.main import app
 
 
-def test_status_endpoint_returns_active_by_default():
+def test_status_endpoint_returns_ok():
     client = TestClient(app)
     response = client.get("/status")
     assert response.status_code == 200
-    assert response.json() == {"is_active": True}
+    assert response.json() == {"status": "ok"}
 
 
-def test_toggle_endpoint_updates_state():
+def test_solve_endpoint_returns_result():
     client = TestClient(app)
-    response = client.post("/toggle", json={"active": False})
-    assert response.status_code == 200
-    assert response.json()["is_active"] is False
-
-    status_response = client.get("/status")
-    assert status_response.status_code == 200
-    assert status_response.json()["is_active"] is False
-
-    client.post("/toggle", json={"active": True})
-
-
-def test_solve_endpoint_returns_result_when_active():
-    client = TestClient(app)
-    client.post("/toggle", json={"active": True})
-
     response = client.post(
         "/solve",
-        json={"expression": "x^2-1=0", "type": "equation", "action": "solve"},
+        json={"expression": "x^2-1=0", "type": "equation", "action": None},
     )
     assert response.status_code == 200
     assert response.json()["ok"] is True
     assert "1" in response.json()["result"]
 
 
-def test_solve_endpoint_rejects_when_inactive():
+def test_solve_endpoint_returns_400_on_invalid_expression():
     client = TestClient(app)
-    client.post("/toggle", json={"active": False})
-
     response = client.post(
         "/solve",
-        json={"expression": "x^2-1=0", "type": "equation", "action": "solve"},
+        json={"expression": "x=", "type": "equation", "action": None},
     )
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Service is inactive"
+    assert response.status_code == 400
 
-    client.post("/toggle", json={"active": True})
+
+def test_solve_expression_simplify():
+    client = TestClient(app)
+    response = client.post(
+        "/solve",
+        json={"expression": "2*x+2*x", "type": "expression", "action": "simplify"},
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+
+def test_solve_inequality():
+    client = TestClient(app)
+    response = client.post(
+        "/solve",
+        json={"expression": "x>1", "type": "inequality", "action": None},
+    )
+    assert response.status_code == 200
+    assert "1" in response.json()["result"]

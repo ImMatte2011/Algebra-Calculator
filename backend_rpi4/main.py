@@ -9,8 +9,6 @@ from utils.validators import verify_bearer_token
 
 app = FastAPI(title="Calc Algebraica API")
 
-is_active = True
-
 
 class SolveRequest(BaseModel):
     expression: str
@@ -18,34 +16,27 @@ class SolveRequest(BaseModel):
     action: Optional[str] = None
 
 
-class ToggleRequest(BaseModel):
-    active: bool
-
-
-class StatusResponse(BaseModel):
-    is_active: bool
-
-
 class SolveResponse(BaseModel):
     ok: bool
     result: str
 
 
+class HealthResponse(BaseModel):
+    status: str
+
+
 @app.on_event("startup")
 def startup_event():
-    info("Starting RPi calculator API")
+    info("Starting Calc Algebraica API")
 
 
 @app.on_event("shutdown")
 def shutdown_event():
-    info("Stopping RPi calculator API")
+    info("Stopping Calc Algebraica API")
 
 
 @app.post("/solve", response_model=SolveResponse)
 def solve(request: SolveRequest, token: str = Depends(verify_bearer_token)):
-    if not is_active:
-        raise HTTPException(status_code=403, detail="Service is inactive")
-
     result = solve_expression(
         request.expression,
         request.type,
@@ -53,18 +44,15 @@ def solve(request: SolveRequest, token: str = Depends(verify_bearer_token)):
     )
 
     if result is None or result.startswith("error:"):
-        raise HTTPException(status_code=400, detail=result or "Unable to solve expression")
+        raise HTTPException(
+            status_code=400,
+            detail=result or "Unable to solve expression"
+        )
 
     return SolveResponse(ok=True, result=result)
 
 
-@app.post("/toggle", response_model=StatusResponse)
-def toggle(request: ToggleRequest, token: str = Depends(verify_bearer_token)):
-    global is_active
-    is_active = request.active
-    return StatusResponse(is_active=is_active)
-
-
-@app.get("/status", response_model=StatusResponse)
+@app.get("/status", response_model=HealthResponse)
 def status(token: str = Depends(verify_bearer_token)):
-    return StatusResponse(is_active=is_active)
+    """Health check. Returns ok if the server is running."""
+    return HealthResponse(status="ok")
