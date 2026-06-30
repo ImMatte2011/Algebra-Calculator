@@ -27,6 +27,9 @@ class KeypadAction:
     TYPE_INEQUALITY  = "CMD_TYPE_INEQUALITY"
     TYPE_EXPRESSION  = "CMD_TYPE_EXPRESSION"
 
+    # Funzione radice — inserisce "sqrt(" nell'espressione
+    SQRT = "CMD_SQRT"
+
     # Solo per keypad matriciale (doppio SHIFT hardware)
     SHIFT_A   = "CMD_SHIFT_A"
     SHIFT_B   = "CMD_SHIFT_B"

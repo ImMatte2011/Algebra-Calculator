@@ -75,6 +75,11 @@ class InputHandler:
             self.menu_choice  = None
             return {"menu_open": True, "prompt": self.get_menu_prompt()}
 
+        # Gestione simbolo di radice (layer 2) 
+        if key == KeypadAction.SQRT:
+            self._insert_char("sqrt(")
+            return None
+
         # ---------------------------------------------------------------
         # Menu interattivo (matrix keypad o TYPE_EXPRESSION da Layer 3)
         # ---------------------------------------------------------------

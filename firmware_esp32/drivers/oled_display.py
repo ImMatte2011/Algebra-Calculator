@@ -22,6 +22,7 @@ import time
 import framebuf
 from machine import Pin, SPI, I2C
 from drivers.display_abstract import DisplayBase
+from drivers.oled_glyphs import split_with_glyphs, GLYPH_WIDTH
 from config import CONFIG
 
 # ---------------------------------------------------------------------------
@@ -283,6 +284,67 @@ class OledDisplay(DisplayBase):
         if status_text:
             self._fb.fill_rect(0, self.height - 8, self.width, 8, 0)
             self._fb.text(status_text[:max_chars], 0, self.height - 8, 1)
+        self.show()
+    
+    def _draw_glyph_bitmap(self, bitmap, x, y):
+        """Disegna un bitmap 8x8 (bytes, un byte per riga) a partire da (x,y)."""
+        for row in range(8):
+            byte = bitmap[row]
+            for col in range(8):
+                if byte & (0x80 >> col):
+                    self._fb.pixel(x + col, y + row, 1)
+ 
+    def show_text_glyphs(self, text, line=0):
+        """
+        Come show_text(), ma sostituisce le sottostringhe note (sqrt(, <=,
+        >=, !=) con i bitmap corrispondenti invece di stamparle come testo.
+        L'espressione sottostante (in InputHandler) resta invariata: questo
+        metodo tocca solo il rendering, non i dati.
+        """
+        y = line * self.CHAR_H
+        if y + self.CHAR_H > self.height:
+            return
+ 
+        self._fb.fill_rect(0, y, self.width, self.CHAR_H, 0)
+ 
+        x = 0
+        for content, kind in split_with_glyphs(text):
+            if x >= self.width:
+                break
+            if kind == "glyph":
+                self._draw_glyph_bitmap(content, x, y)
+                x += GLYPH_WIDTH
+            else:
+                self._fb.text(content, x, y, 1)
+                x += self.CHAR_W
+        self.show()
+ 
+    def show_expr_and_status_glyphs(self, expr_text, status_text=""):
+        """Variante con glifi di show_expr_and_status(). Usare questa per
+        mostrare l'espressione quando si vogliono i simboli matematici resi
+        come bitmap invece che come testo ASCII (es. sqrt(, <=, >=, !=)."""
+        self._fb.fill(0)
+        max_chars = self.width // self.CHAR_W
+ 
+        segments = split_with_glyphs(expr_text)
+        x, y = 0, 0
+        for content, kind in segments:
+            w = GLYPH_WIDTH if kind == "glyph" else self.CHAR_W
+            if x + w > self.width:
+                x = 0
+                y += self.CHAR_H
+                if y + self.CHAR_H > self.height - self.CHAR_H:
+                    break  # lascia l'ultima riga libera per lo status
+            if kind == "glyph":
+                self._draw_glyph_bitmap(content, x, y)
+            else:
+                self._fb.text(content, x, y, 1)
+            x += w
+ 
+        if status_text:
+            self._fb.fill_rect(0, self.height - 8, self.width, 8, 0)
+            self._fb.text(status_text[:max_chars], 0, self.height - 8, 1)
+ 
         self.show()
 
     def invert(self, invert=True):

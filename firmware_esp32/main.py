@@ -38,7 +38,10 @@ if CONFIG["DISPLAY_TYPE"] == "oled":
             display._fb.text(status, 0, 56, 1)
             display.show()
         else:
-            display.show_expr_and_status(expr, status)
+            if CONFIG["OLED"].get("USE_GLYPHS", True):
+                display.show_expr_and_status_glyphs(expr, status)
+            else:
+                display.show_expr_and_status(expr, status)
 
 else:
     from drivers.lcd_display import LCDDisplay

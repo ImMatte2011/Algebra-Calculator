@@ -46,6 +46,9 @@ CONFIG = {
         "WIDTH":  128,
         "HEIGHT": 64,
 
+        # Metodo di rendering su OLED
+        "USE_GLYPHS": True,
+
         # Pin SPI (usati quando BUS="SPI")
         "SCK_PIN":  18,   # clock
         "MOSI_PIN": 23,   # data

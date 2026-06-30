@@ -15,52 +15,42 @@ from utils import logger
 
 _MAC = CONFIG["BLE_KP_MAC"]
 
-# UUID standard HID
 _UUID_HID_SERVICE = ubluetooth.UUID(0x1812)
 _UUID_HID_REPORT  = ubluetooth.UUID(0x2A4D)
 _UUID_BOOT_MOUSE  = ubluetooth.UUID(0x2A33)
 _UUID_CCCD        = ubluetooth.UUID(0x2902)
 _NOTIFY_ENABLE    = b'\x01\x00'
 
-# Bitmask modifier
-_MOD_CTRL  = 0x11   # LCTRL | RCTRL
 _MOD_SHIFT = 0x22   # LSHIFT | RSHIFT
-_MOD_GUI   = 0x88   # LGUI | RGUI
 
 # ---------------------------------------------------------------------------
-# Lookup table keycode → (senza_shift, con_shift)
-# Aggiornata con i numpad keycodes confermati da hid_mapper.py
+# Caratteri (senza_shift, con_shift) — solo i keycode realmente usati dal
+# macropad, confermati da hid_mapper.py. Nessuna tabella alfabetica
+# completa: non serve, il macropad non manda lettere libere.
 # ---------------------------------------------------------------------------
 _HID_CHAR = {
-    # Lettere
-    0x04: ('a','A'), 0x05: ('b','B'), 0x06: ('c','C'), 0x07: ('d','D'),
-    0x08: ('e','E'), 0x09: ('f','F'), 0x0A: ('g','G'), 0x0B: ('h','H'),
-    0x0C: ('i','I'), 0x0D: ('j','J'), 0x0E: ('k','K'), 0x0F: ('l','L'),
-    0x10: ('m','M'), 0x11: ('n','N'), 0x12: ('o','O'), 0x13: ('p','P'),
-    0x14: ('q','Q'), 0x15: ('r','R'), 0x16: ('s','S'), 0x17: ('t','T'),
-    0x18: ('u','U'), 0x19: ('v','V'), 0x1A: ('w','W'), 0x1B: ('x','X'),
-    0x1C: ('y','Y'), 0x1D: ('z','Z'),
-    # Simboli (confermati dallo scan: SHIFT+0x23='^', SHIFT+0x25='*', ecc.)
-    0x1E: ('1','!'), 0x1F: ('2','@'), 0x20: ('3','#'), 0x21: ('4','$'),
-    0x22: ('5','%'), 0x23: ('6','^'), 0x24: ('7','&'), 0x25: ('8','*'),
-    0x26: ('9','('), 0x27: ('0',')'),
-    0x2D: ('-','_'), 0x2E: ('=','+'),
-    0x2F: ('[','{'), 0x30: (']','}'), 0x31: ('\\','|'),
-    0x33: (';',':'), 0x34: ("'",'"'), 0x35: ('`','~'),
-    0x36: (',','<'), 0x37: ('.','>')  , 0x38: ('/','?'),
-    # Numpad (confermati da hid_mapper.py: 0x59-0x62, 0x54-0x58)
-    0x54: ('/','/' ), 0x55: ('*','*'), 0x56: ('-','-'), 0x57: ('+','+'),
-    0x59: ('1','1'), 0x5A: ('2','2'), 0x5B: ('3','3'),
-    0x5C: ('4','4'), 0x5D: ('5','5'), 0x5E: ('6','6'),
-    0x5F: ('7','7'), 0x60: ('8','8'), 0x61: ('9','9'),
-    0x62: ('0','0'), 0x63: ('.','.' ),
+    # Numpad (Layer 1)
+    0x59: ('1', '1'), 0x5A: ('2', '2'), 0x5B: ('3', '3'),
+    0x5C: ('4', '4'), 0x5D: ('5', '5'), 0x5E: ('6', '6'),
+    0x5F: ('7', '7'), 0x60: ('8', '8'), 0x61: ('9', '9'),
+    0x62: ('0', '0'),
+    0x57: ('+', '+'), 0x56: ('-', '-'), 0x55: ('*', '*'), 0x54: ('/', '/'),
+    0x1B: ('x', 'x'),   # incognita
+
+    # Layer 2 — simboli ed equazioni
+    0x23: ('6', '^'),   # SHIFT+6 → ^ (esponente)
+    0x26: ('9', '('),   # SHIFT+9 → (
+    0x27: ('0', ')'),   # SHIFT+0 → )
+    0x36: (',', '<'),   # SHIFT+, → <
+    0x37: ('.', '>'),   # SHIFT+. → >
+    0x2E: ('=', '='),   # =
+    0x1E: ('1', '!'),   # SHIFT+1 → !
 }
 
-# Keycodes → KeypadAction (indipendenti dal modifier, controllati prima di _HID_CHAR)
+# Azioni di controllo — indipendenti dal modifier
 _HID_ACTION = {
-    0x28: KeypadAction.ENTER,
-    0x58: KeypadAction.ENTER,       # Numpad ENTER
-    0x29: KeypadAction.CLEAR,       # ESC → CLEAR
+    0x28: KeypadAction.ENTER,    # numpad ENTER
+    0x29: KeypadAction.CLEAR,    # ESC (anche click knob 3)
     0x2A: KeypadAction.BACKSPACE,
     0x4C: KeypadAction.DELETE,
     0x4F: KeypadAction.RIGHT,
@@ -69,77 +59,32 @@ _HID_ACTION = {
     0x52: KeypadAction.UP,
 }
 
-# F13-F24 → azioni matematiche (Layer 3 del macropad)
-# 0x68=F13 … 0x73=F24
-# Mappa: assegna F13-F18 alle 6 azioni, F19-F24 libere per espansioni future
+# F-key azioni matematiche dirette (Layer 3).
+# F1-F6 assegnate alle 6 azioni; F7-F16 libere per espansioni future.
+# F17 (0x6C) riservata a SQRT (sostituisce la vecchia macro testuale "sqrt").
 _HID_FN = {
-    0x68: KeypadAction.ACTION_SIMPLIFY,   # F13
-    0x69: KeypadAction.ACTION_EXPAND,     # F14
-    0x6A: KeypadAction.ACTION_FACTOR,     # F15 — confermato nello scan
-    0x6B: KeypadAction.TYPE_EQUATION,     # F16
-    0x6C: KeypadAction.TYPE_INEQUALITY,   # F17
-    0x6D: KeypadAction.TYPE_EXPRESSION,   # F18 — confermato nello scan
-    # F19-F24 (0x6E-0x73): liberi, aggiungere qui se servono
-}
-
-# Knob CW/CCW mappati a F-keys (da rimappare nel tool del macropad)
-# Esempio suggerito:
-#   Knob 1 CW  → F5  (0x3E) → RIGHT  (già in scan)
-#   Knob 1 CCW → F6  (0x3F) → LEFT
-#   Knob 2 CW  → F7  (0x40) → DOWN
-#   Knob 2 CCW → F8  (0x41) → UP
-# Per ora F5 (0x3E) confermato = knob CW:
-_HID_KNOB = {
-    0x3E: KeypadAction.RIGHT,   # F5 = Knob 1 CW  → cursore destra
-    0x3F: KeypadAction.LEFT,    # F6 = Knob 1 CCW → cursore sinistra
-    0x40: KeypadAction.DOWN,    # F7 = Knob 2 CW  → giù (menu / history)
-    0x41: KeypadAction.UP,      # F8 = Knob 2 CCW → su
+    0x3A: KeypadAction.ACTION_SIMPLIFY,   # F1
+    0x3B: KeypadAction.ACTION_EXPAND,     # F2
+    0x3C: KeypadAction.ACTION_FACTOR,     # F3
+    0x3D: KeypadAction.TYPE_EQUATION,     # F4
+    0x3E: KeypadAction.TYPE_INEQUALITY,   # F5
+    0x3F: KeypadAction.TYPE_EXPRESSION,   # F6
+    # F7-F16 (0x40-0x45, 0x68-0x6B): libere, aggiungere qui se servono
+    0x6C: KeypadAction.SQRT,              # F17 — radice (remap nel tool)
 }
 
 
 def _decode(keycode, modifier):
-    """
-    Converte (keycode, modifier) in KeypadAction o carattere.
-    Restituisce None per eventi da ignorare.
-
-    Ordine di priorità:
-      1. CTRL+A → CLEAR (combo confermata dallo scan)
-      2. GUI+key  → ignora (tasti Windows, non usati dalla calcolatrice)
-      3. F-key funzioni matematiche (Layer 3)
-      4. F-key knob CW/CCW
-      5. Azioni di controllo (ENTER, BKSP, frecce...)
-      6. Caratteri con/senza SHIFT
-    """
+    """Converte (keycode, modifier) in KeypadAction o carattere. None = ignora."""
     if keycode == 0:
         return None
-
-    # 1. CTRL+A → CLEAR (select-all + backspace, confermato hid_mapper)
-    if modifier & _MOD_CTRL and keycode == 0x04:
-        return KeypadAction.CLEAR
-
-    # 2. Qualsiasi combo con GUI (Windows key) → ignora
-    #    (knob non ancora rimappati, o azioni PC non rilevanti per ESP32)
-    if modifier & _MOD_GUI:
-        return None
-
-    # 3. F-key azioni matematiche (Layer 3)
     if keycode in _HID_FN:
         return _HID_FN[keycode]
-
-    # 4. F-key knob
-    if keycode in _HID_KNOB:
-        return _HID_KNOB[keycode]
-
-    # 5. Azioni di controllo
     if keycode in _HID_ACTION:
         return _HID_ACTION[keycode]
-
-    # 6. Caratteri
     if keycode in _HID_CHAR:
         shifted = bool(modifier & _MOD_SHIFT)
         return _HID_CHAR[keycode][1 if shifted else 0]
-
-    # Keycode sconosciuto — logga solo in debug per non spammare
     logger.debug("HID keycode sconosciuto: 0x%02X mod=0x%02X", keycode, modifier)
     return None
 
@@ -148,10 +93,7 @@ def _decode(keycode, modifier):
 # Driver BLE HID Central
 # ---------------------------------------------------------------------------
 class KeypadBleHid(KeypadBase):
-    """
-    Tastierino BLE HID come BLE central.
-    Riconnessione automatica, coda eventi thread-safe (IRQ → coda → poll).
-    """
+    """Tastierino BLE HID come BLE central. Riconnessione automatica."""
 
     _IRQ_PERIPHERAL_CONNECT           = 7
     _IRQ_PERIPHERAL_DISCONNECT        = 8
@@ -207,9 +149,9 @@ class KeypadBleHid(KeypadBase):
             conn, _, _ = data
             self._conn = conn
             self._phase = "discover_services"
-            self._all_services  = []
+            self._all_services   = []
             self._report_handles = []
-            self._cccd_queue    = []
+            self._cccd_queue     = []
             self._ble.gattc_discover_services(conn)
 
         elif event == self._IRQ_PERIPHERAL_DISCONNECT:
@@ -258,7 +200,7 @@ class KeypadBleHid(KeypadBase):
 
         elif event == self._IRQ_GATTC_NOTIFY:
             _, value_handle, notify_data = data
-            self._handle_notify(value_handle, bytes(notify_data))
+            self._handle_notify(bytes(notify_data))
 
     def _discover_next_desc(self):
         if self._current_char_idx >= len(self._report_handles):
@@ -281,48 +223,15 @@ class KeypadBleHid(KeypadBase):
             logger.info("KeypadBleHid: pronto")
             self._notify_state("ready")
 
-    def _handle_notify(self, value_handle, data):
-        n = len(data)
-        if n == 0:
-            return
-
-        # Report tastiera standard (handle=43 confermato): 8 byte, data[1]==0x00
-        if n >= 3 and data[1] == 0x00:
+    def _handle_notify(self, data):
+        # Report tastiera standard: 8 byte, [modifier, 0x00, key1..key6]
+        if len(data) >= 3 and data[1] == 0x00:
             modifier = data[0]
             for kc in data[2:]:
                 if kc != 0:
                     self._event_queue.append((kc, modifier))
-            return
-
-        # Consumer report (handle=50): [report_id, usage_lo, usage_hi]
-        # usage=0x0000 = key-up, ignora
-        if n >= 3:
-            usage = data[1] | (data[2] << 8)
-            if usage != 0:
-                self._handle_consumer(usage)
-            return
-
-        # Report a 2 byte: [report_id, usage]
-        if n == 2 and data[1] != 0:
-            self._handle_consumer(data[1])
-            return
-
-        # RAW handle=62 (formato proprietario knob):
-        # byte 6 = 0x01 press / 0x00 release — al momento ignorato
-        # da implementare quando la mappatura knob sarà definitiva
-
-    def _handle_consumer(self, usage):
-        """Mappa usage Consumer Control in KeypadAction."""
-        _consumer = {
-            0x00E9: KeypadAction.RIGHT,    # volume up  → knob CW
-            0x00EA: KeypadAction.LEFT,     # volume down → knob CCW
-            0x00E2: KeypadAction.CLEAR,    # mute       → click knob (CLEAR)
-            0x00B5: KeypadAction.RIGHT,    # next track
-            0x00B6: KeypadAction.LEFT,     # prev track
-        }
-        action = _consumer.get(usage)
-        if action:
-            self._event_queue.append((None, None, action))
+        # Altri report (boot mouse, knob proprietari): non utilizzati
+        # per ora, i knob mandano keycode standard già gestiti sopra.
 
     # -----------------------------------------------------------------------
     # KeypadBase interface
@@ -337,13 +246,7 @@ class KeypadBleHid(KeypadBase):
         if self._phase != "ready" or not self._event_queue:
             return None
 
-        event = self._event_queue.pop(0)
-
-        # Evento consumer già risolto: (None, None, action)
-        if len(event) == 3:
-            return event[2]
-
-        keycode, modifier = event
+        keycode, modifier = self._event_queue.pop(0)
         return _decode(keycode, modifier)
 
     def is_ready(self):
