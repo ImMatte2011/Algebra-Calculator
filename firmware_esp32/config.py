@@ -41,7 +41,7 @@ CONFIG = {
         # Controller: "SSD1309" | "SSD1306" | "SH1106"
         # SSD1309 e SSD1306 usano gli stessi comandi.
         # SH1106 ha un offset di colonna diverso (+2) nella routine di pagina.
-        "CONTROLLER": "SH1106",
+        "CONTROLLER": "SSD1309",
 
         "WIDTH":  128,
         "HEIGHT": 64,
