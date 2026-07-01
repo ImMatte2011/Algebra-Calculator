@@ -23,8 +23,10 @@ class AppSettings(context: Context) {
         fun isValidMac(mac: String): Boolean =
             Regex("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$").matches(mac)
 
-        fun isValidBaseUrl(url: String): Boolean =
-            Regex("^https?://[^\\s/]+(:\\d+)?/?$").matches(url)
+        fun isValidBaseUrl(url: String): Boolean {
+            if (url.isBlank()) return false
+            return Regex("^https?://[^\\s/]+(:\\d+)?/?$").matches(url)
+        }
     }
 
     var espMacAddress: String

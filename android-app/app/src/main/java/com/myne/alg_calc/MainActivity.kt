@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun BridgeScreen(viewModel: MainViewModel = viewModel()) {
+fun BridgeScreen(viewModel: MainViewModel = viewModel(factory = MainViewModel.Factory)) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val permissionsState = rememberMultiplePermissionsState(
         permissions = viewModel.requiredBlePermissions().toList()

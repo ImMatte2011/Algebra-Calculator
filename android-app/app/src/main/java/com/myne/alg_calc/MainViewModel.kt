@@ -3,6 +3,9 @@ package com.myne.alg_calc
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.myne.alg_calc.ble.BleConnectionState
 import com.myne.alg_calc.ble.BleManager
 import com.myne.alg_calc.ble.BlePacketParseException
@@ -68,8 +71,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .launchIn(viewModelScope)
     }
 
-    private fun buildApiService(): ApiService =
-        ApiService.create(baseUrl = settings.rpiBaseUrl, token = settings.apiToken)
+    private fun buildApiService(): ApiService {
+        // Se l'URL è vuoto o non valido, usiamo un placeholder per evitare il crash di Retrofit.
+        // L'app non farà comunque chiamate finché l'utente non inserisce un URL vero.
+        val url = if (AppSettings.isValidBaseUrl(settings.rpiBaseUrl)) {
+            settings.rpiBaseUrl
+        } else {
+            "http://localhost/" // URL di sicurezza per evitare il crash
+        }
+
+        return ApiService.create(baseUrl = url, token = settings.apiToken)
+    }
 
     fun requiredBlePermissions(): Array<String> = bleManager.requiredPermissions()
 
@@ -84,7 +96,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateEspMac(mac: String): Boolean {
-        if (!settings.isValidMac(mac)) return false
+        if (!AppSettings.isValidMac(mac)) return false
         settings.espMacAddress = mac
         _uiState.value = _uiState.value.copy(
             espMacAddress = mac,
@@ -95,7 +107,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateRpiBaseUrl(url: String): Boolean {
-        if (!settings.isValidBaseUrl(url)) return false
+        if (!AppSettings.isValidBaseUrl(url)) return false
         settings.rpiBaseUrl = url
         apiService = buildApiService()
         _uiState.value = _uiState.value.copy(
@@ -201,5 +213,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         bleManager.release()
+    }
+    companion object {
+        val Factory: ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                val application = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as Application
+                MainViewModel(application)
+            }
+        }
     }
 }
