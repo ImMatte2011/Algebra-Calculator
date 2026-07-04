@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mappa Tastierino 4x4 - ESP32 Calc</title>
+    <title>4x4 Keypad Map - ESP32 Calc</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -52,7 +52,7 @@
             height: 20px;
         }
 
-        /* Griglia Tastierino 4x4 */
+        /* 4x4 Keypad Grid */
         .keypad {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -77,7 +77,7 @@
             position: relative;
         }
         
-        /* Etichetta piccola del tasto fisico nell'angolo in alto a sinistra */
+        /* Small physical key label in the top-left corner */
         .key::before {
             content: attr(data-physical);
             position: absolute;
@@ -88,7 +88,7 @@
             font-weight: normal;
         }
 
-        /* Colori differenziati in base al tipo di tasto */
+        /* Colour variants by key type */
         .key.number { background: #fff; box-shadow: 0 3px 0 #ced6e0; }
         .key.cmd { background: #ffeaa7; color: #d63031; font-size: 0.8rem; box-shadow: 0 3px 0 #eccc68; }
         .key.arrow { background: #dfe4ea; color: #2f3542; font-size: 0.85rem; box-shadow: 0 3px 0 #a4b0be; }
@@ -102,13 +102,13 @@
 </head>
 <body>
 
-    <h1>🎮 Mappa Interfaccia Tastierino 4x4 (Doppio Shift)</h1>
+    <h1>🎮 4x4 Keypad Interface Map (Double Shift)</h1>
 
     <div class="container">
 
         <div class="card primaria">
-            <h2>⚪ Modalità Primaria</h2>
-            <div class="subtitle">Stato standard all'avvio</div>
+            <h2>⚪ Primary Mode</h2>
+            <div class="subtitle">Standard state at startup</div>
             <div class="keypad">
                 <div class="key number" data-physical="1">1</div>
                 <div class="key number" data-physical="2">2</div>
@@ -125,16 +125,16 @@
                 <div class="key number" data-physical="9">9</div>
                 <div class="key cmd" data-physical="C">DELETE</div>
 
-                <div class="key act-sh-a" data-physical="*">VAI A<br>SHIFT A</div>
+                <div class="key act-sh-a" data-physical="*">GO TO<br>SHIFT A</div>
                 <div class="key number" data-physical="0">0</div>
-                <div class="key act-sh-b" data-physical="#">VAI A<br>SHIFT B</div>
+                <div class="key act-sh-b" data-physical="#">GO TO<br>SHIFT B</div>
                 <div class="key cmd" data-physical="D">ENTER</div>
             </div>
         </div>
 
         <div class="card shift-a">
-            <h2>🟢 Modalità SHIFT A</h2>
-            <div class="subtitle">Attivata premendo il tasto (*)</div>
+            <h2>🟢 SHIFT A Mode</h2>
+            <div class="subtitle">Activated by pressing (*)</div>
             <div class="keypad">
                 <div class="key number" data-physical="1">(</div>
                 <div class="key number" data-physical="2">)</div>
@@ -151,23 +151,23 @@
                 <div class="key number" data-physical="9">9</div>
                 <div class="key cmd" data-physical="C">DELETE</div>
 
-                <div class="key active-sh-a" data-physical="*">DISATTIVA<br>SHIFT A</div>
+                <div class="key active-sh-a" data-physical="*">DISABLE<br>SHIFT A</div>
                 <div class="key number" data-physical="0">0</div>
-                <div class="key act-sh-b" data-physical="#">SALTA A<br>SHIFT B</div>
+                <div class="key act-sh-b" data-physical="#">JUMP TO<br>SHIFT B</div>
                 <div class="key cmd" data-physical="D">ENTER</div>
             </div>
         </div>
 
         <div class="card shift-b">
-            <h2>🔵 Modalità SHIFT B</h2>
-            <div class="subtitle">Attivata premendo il tasto (#)</div>
+            <h2>🔵 SHIFT B Mode</h2>
+            <div class="subtitle">Activated by pressing (#)</div>
             <div class="keypad">
-                <div class="key arrow" data-physical="1">⬅️ SX</div>
-                <div class="key arrow" data-physical="2">➡️ DX</div>
-                <div class="key arrow" data-physical="3">⬆️ SU</div>
+                <div class="key arrow" data-physical="1">⬅️ LEFT</div>
+                <div class="key arrow" data-physical="2">➡️ RIGHT</div>
+                <div class="key arrow" data-physical="3">⬆️ UP</div>
                 <div class="key cmd" data-physical="A">CLEAR</div>
 
-                <div class="key arrow" data-physical="4">⬇️ GIÙ</div>
+                <div class="key arrow" data-physical="4">⬇️ DOWN</div>
                 <div class="key number" data-physical="5">&gt;</div>
                 <div class="key number" data-physical="6">&lt;</div>
                 <div class="key cmd" data-physical="B">BACKSP</div>
@@ -177,9 +177,9 @@
                 <div class="key number" data-physical="9">!=</div>
                 <div class="key cmd" data-physical="C">DELETE</div>
 
-                <div class="key act-sh-a" data-physical="*">SALTA A<br>SHIFT A</div>
+                <div class="key act-sh-a" data-physical="*">JUMP TO<br>SHIFT A</div>
                 <div class="key number" data-physical="0">=</div>
-                <div class="key active-sh-b" data-physical="#">DISATTIVA<br>SHIFT B</div>
+                <div class="key active-sh-b" data-physical="#">DISABLE<br>SHIFT B</div>
                 <div class="key cmd" data-physical="D">ENTER</div>
             </div>
         </div>

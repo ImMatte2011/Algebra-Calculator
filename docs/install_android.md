@@ -1,135 +1,103 @@
-# Installare l'app Android — dal repo al telefono
+# Installing the Android App — From Repo to Phone
 
-Questa guida copre il percorso completo: clonare il repo, compilare l'app
-in Android Studio, e installarla su un telefono fisico (non emulatore,
-necessario per il BLE).
+This guide covers the full path: cloning the repo, building the app in Android Studio, and installing it on a physical phone (not an emulator — required for BLE).
 
-## Prerequisiti
+## Prerequisites
 
-- [Android Studio](https://developer.android.com/studio) (Hedgehog o più recente)
-- Un telefono Android con **Bluetooth Low Energy** (praticamente tutti
-  dal 2014 in poi) e **Android 8.0 (API 26)** o superiore
-- Cavo USB per collegare il telefono al PC, oppure debug wireless (ADB over Wi-Fi)
-- Git installato
+- [Android Studio](https://developer.android.com/studio) (Hedgehog or newer)
+- An Android phone with **Bluetooth Low Energy** (virtually all devices since 2014) and **Android 8.0 (API 26)** or higher
+- A USB cable to connect the phone to the PC, or wireless debugging (ADB over Wi-Fi)
+- Git installed
 
-## 1. Clona il repository
+## 1. Clone the Repository
 
 ```bash
-git clone https://github.com/<utente>/Algebra-Calculator.git
+git clone https://github.com/<user>/Algebra-Calculator.git
 cd Algebra-Calculator
 ```
 
-L'app Android è nella sottocartella `android-app/` — è un progetto
-Gradle indipendente, non serve toccare il resto del repo per compilarla.
+The Android app is in the `android-app/` subfolder — it is an independent Gradle project; you don't need to touch the rest of the repo to build it.
 
-## 2. Apri il progetto in Android Studio
+## 2. Open the Project in Android Studio
 
-`File → Open` e seleziona la cartella `android-app/` (non la root del
-repo — Android Studio si aspetta `build.gradle.kts` nella cartella aperta).
+`File → Open` and select the `android-app/` folder (not the repo root — Android Studio expects `build.gradle.kts` in the opened folder).
 
-Al primo avvio, Android Studio:
-- crea automaticamente `local.properties` con il percorso del tuo SDK
-  (non serve farlo a mano — vedi `local.properties.example` se vuoi
-  capire cosa contiene)
-- scarica le dipendenze Gradle (Retrofit, Compose, ecc.) — richiede
-  connessione internet la prima volta
+On first launch, Android Studio will:
+- automatically create `local.properties` with your SDK path (no need to do it manually — see `local.properties.example` if you want to understand what it contains)
+- download Gradle dependencies (Retrofit, Compose, etc.) — requires an internet connection on the first run
 
-Se richiesto, lascia che Android Studio aggiorni il Gradle Wrapper alla
-versione del progetto.
+If prompted, let Android Studio update the Gradle Wrapper to the project version.
 
-## 3. Abilita il debug USB sul telefono
+## 3. Enable USB Debugging on the Phone
 
-Sul telefono:
-1. `Impostazioni → Info telefono` → tocca 7 volte su "Numero build" per
-   abilitare le Opzioni sviluppatore
-2. `Impostazioni → Opzioni sviluppatore` → attiva **Debug USB**
-3. Collega il telefono al PC via USB — comparirà un popup "Consenti
-   debug USB?" sul telefono: conferma
+On the phone:
+1. `Settings → About phone` → tap "Build number" 7 times to enable Developer Options
+2. `Settings → Developer options` → enable **USB Debugging**
+3. Connect the phone to the PC via USB — an "Allow USB debugging?" popup will appear on the phone: confirm
 
-Verifica che il telefono sia visto correttamente:
+Verify the phone is recognised correctly:
 ```bash
 adb devices
 ```
-Deve comparire il tuo dispositivo con stato `device` (non `unauthorized`).
+Your device should appear with status `device` (not `unauthorized`).
 
-## 4. Compila e installa
+## 4. Build and Install
 
-In Android Studio, con il telefono collegato e selezionato nella barra
-in alto (accanto al pulsante ▶️ Run):
+In Android Studio, with the phone connected and selected in the toolbar (next to the ▶️ Run button):
 
-- Premi **Run ▶️** (o `Shift+F10`)
+- Press **Run ▶️** (or `Shift+F10`)
 
-Questo compila l'APK in debug e lo installa automaticamente sul telefono.
-La prima compilazione può richiedere qualche minuto.
+This compiles the debug APK and automatically installs it on the phone. The first build may take a few minutes.
 
-In alternativa da terminale:
+Alternatively, from the terminal:
 ```bash
 cd android-app
 ./gradlew installDebug
 ```
 
-## 5. Configura l'app al primo avvio
+## 5. Configure the App on First Launch
 
-L'app non ha valori preimpostati (vedi [android_app.md](android_app.md)
-— nessun MAC o URL hardcoded nel sorgente). Alla prima apertura:
+The app has no preset values (see [android_app.md](android_app.md) — no MAC or URL hardcoded in the source). On first launch:
 
-1. Vai nella schermata impostazioni dell'app
-2. Inserisci l'**indirizzo MAC dell'ESP32** (visibile via `nRF Connect`
-   o app simile, oppure lo trovi nei log seriali del firmware all'avvio)
-3. Inserisci l'**URL del server FastAPI**, con porta:
-   - se usi Tailscale: `http://100.x.x.x:8000/`
-   - se usi Caddy/dominio pubblico: `https://tuo-dominio.duckdns.org/`
-4. Se il backend gira con `ACCESS_MODE=public` (vedi
-   [deploy.md](deploy.md)), inserisci anche il **token API** — deve
-   coincidere con `API_TOKEN` nel `.env` del Raspberry Pi
-5. Se usi `ACCESS_MODE=tailscale`, lascia il campo token vuoto
+1. Go to the app's settings screen
+2. Enter the **ESP32 MAC address** (visible via `nRF Connect` or a similar app, or find it in the firmware serial logs at startup)
+3. Enter the **FastAPI server URL**, with port:
+   - if using Tailscale: `http://100.x.x.x:8000/`
+   - if using Caddy/public domain: `https://your-domain.duckdns.org/`
+4. If the backend runs with `ACCESS_MODE=public` (see [deploy.md](deploy.md)), also enter the **API token** — it must match `API_TOKEN` in the Raspberry Pi's `.env`
+5. If using `ACCESS_MODE=tailscale`, leave the token field empty
 
-## 6. Concedi i permessi Bluetooth
+## 6. Grant Bluetooth Permissions
 
-Al primo tentativo di connessione, Android chiederà i permessi BLE:
-- Android 12+: "Consenti a Calc Algebraica di trovare dispositivi nelle
-  vicinanze?" → consenti
-- Android < 12: chiederà il permesso di posizione (richiesto dal sistema
-  per lo scan BLE su versioni precedenti, anche se l'app non usa la
-  posizione — vedi [android_app.md](android_app.md#permessi-bluetooth))
+On the first connection attempt, Android will ask for BLE permissions:
+- Android 12+: "Allow Calc Algebraica to find nearby devices?" → allow
+- Android < 12: will ask for location permission (required by the system for BLE scanning on older versions, even though the app does not use location — see [android_app.md](android_app.md#bluetooth-permissions))
 
-## 7. Genera un APK da condividere (opzionale)
+## 7. Generate a Shareable APK (Optional)
 
-Se vuoi installare l'app su un telefono senza passare da Android Studio
-ogni volta:
+If you want to install the app on a phone without going through Android Studio every time:
 
 ```bash
 cd android-app
 ./gradlew assembleDebug
 ```
 
-L'APK risultante è in `android-app/app/build/outputs/apk/debug/app-debug.apk`.
-Trasferiscilo sul telefono (es. via cavo, email, o `adb install`) e
-installalo manualmente — dovrai abilitare "Installa da fonti sconosciute"
-per l'app che usi per aprirlo.
+The resulting APK is at `android-app/app/build/outputs/apk/debug/app-debug.apk`. Transfer it to the phone (e.g. via cable, email, or `adb install`) and install it manually — you will need to enable "Install from unknown sources" for the app you use to open it.
 
 ```bash
 adb install android-app/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Problemi comuni
+## Common Issues
 
-**"Device not found" / `adb devices` mostra `unauthorized`**
-Scollega e ricollega il cavo USB, conferma di nuovo il popup sul telefono.
+**"Device not found" / `adb devices` shows `unauthorized`**
+Unplug and replug the USB cable, confirm the popup on the phone again.
 
-**L'app non trova l'ESP32 via BLE**
-Verifica che il firmware ESP32 sia effettivamente acceso e in modalità
-discoverable (controlla i log seriali). Verifica che il MAC inserito
-nell'app corrisponda esattamente a quello dell'ESP32 — maiuscole/minuscole
-sbagliate non si connettono.
+**The app can't find the ESP32 via BLE**
+Verify the ESP32 firmware is actually running and in discoverable mode (check the serial logs). Verify the MAC entered in the app matches the ESP32's MAC exactly — wrong capitalisation will prevent connection.
 
-**Errore 401 dal server**
-Il token nell'app non coincide con `API_TOKEN` nel `.env` del backend,
-oppure il backend è in modalità `public` e hai lasciato il token vuoto
-nell'app.
+**401 error from the server**
+The token in the app does not match `API_TOKEN` in the backend's `.env`, or the backend is in `public` mode and you left the token empty in the app.
 
-**Errore di connessione di rete (timeout)**
-Verifica che il telefono sia sulla stessa rete Tailscale del Raspberry
-Pi (se usi quella modalità), o che l'URL/porta nel backend sia
-raggiungibile dal telefono (prova ad aprire l'URL da un browser sul
-telefono stesso).
+**Network connection error (timeout)**
+Verify the phone is on the same Tailscale network as the Raspberry Pi (if using that mode), or that the URL/port in the backend is reachable from the phone (try opening the URL in the phone's browser).

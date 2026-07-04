@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Macropad BLE — Mappa Tasti</title>
+    <title>BLE Macropad — Key Map</title>
     <style>
         :root {
             --bg: #0e0e12;
@@ -252,23 +252,23 @@
 
 <header>
     <h1>MINI-KEYBOARD BLE — E0:0F:7A:C3:C9:DF</h1>
-    <h2>Mappa Tasti Macropad</h2>
-    <p>4×4 grid · 3 knob rotary · 3 layer · firmware Calc Algebraica</p>
+    <h2>Macropad Key Map</h2>
+    <p>4×4 grid · 3 rotary knobs · 3 layers · Calc Algebraica firmware</p>
 </header>
 
 <div class="tabs">
-    <button class="tab active-l1" onclick="setLayer(1, this)">Layer 1 — Numeri</button>
-    <button class="tab" onclick="setLayer(2, this)">Layer 2 — Operatori</button>
-    <button class="tab" onclick="setLayer(3, this)">Layer 3 — Azioni</button>
+    <button class="tab active-l1" onclick="setLayer(1, this)">Layer 1 — Numbers</button>
+    <button class="tab" onclick="setLayer(2, this)">Layer 2 — Operators</button>
+    <button class="tab" onclick="setLayer(3, this)">Layer 3 — Actions</button>
 </div>
 
 <div class="layout">
     <div class="keypad-wrap">
-        <div class="keypad-label">Griglia 4×4</div>
+        <div class="keypad-label">4×4 Grid</div>
         <div class="keypad" id="keypad"></div>
     </div>
     <div class="knobs-wrap">
-        <div class="knobs-title">Knob rotary</div>
+        <div class="knobs-title">Rotary Knobs</div>
 
         <div class="knob-row">
             <div class="knob-svg">
@@ -280,8 +280,8 @@
                 <div class="knob-label">Knob 1</div>
             </div>
             <div class="knob-actions">
-                <div class="knob-action"><span class="knob-icon">↻</span> <span class="knob-value nav-c">frc_destra</span></div>
-                <div class="knob-action"><span class="knob-icon">↺</span> <span class="knob-value nav-c">frc_sinistra</span></div>
+                <div class="knob-action"><span class="knob-icon">↻</span> <span class="knob-value nav-c">arrow_right</span></div>
+                <div class="knob-action"><span class="knob-icon">↺</span> <span class="knob-value nav-c">arrow_left</span></div>
                 <div class="knob-action"><span class="knob-icon">●</span> <span class="knob-value cmd-c">DELETE</span></div>
             </div>
         </div>
@@ -296,8 +296,8 @@
                 <div class="knob-label">Knob 2</div>
             </div>
             <div class="knob-actions">
-                <div class="knob-action"><span class="knob-icon">↻</span> <span class="knob-value nav-c">frc_giù</span></div>
-                <div class="knob-action"><span class="knob-icon">↺</span> <span class="knob-value nav-c">frc_su</span></div>
+                <div class="knob-action"><span class="knob-icon">↻</span> <span class="knob-value nav-c">arrow_down</span></div>
+                <div class="knob-action"><span class="knob-icon">↺</span> <span class="knob-value nav-c">arrow_up</span></div>
                 <div class="knob-action"><span class="knob-icon">●</span> <span class="knob-value cmd-c">BACKSPACE</span></div>
             </div>
         </div>
@@ -312,8 +312,8 @@
                 <div class="knob-label">Knob 3</div>
             </div>
             <div class="knob-actions">
-                <div class="knob-action"><span class="knob-icon">↻</span> <span class="knob-value" style="color:var(--muted)">— (layer hw)</span></div>
-                <div class="knob-action"><span class="knob-icon">↺</span> <span class="knob-value" style="color:var(--muted)">— (layer hw)</span></div>
+                <div class="knob-action"><span class="knob-icon">↻</span> <span class="knob-value" style="color:var(--muted)">— (hw layer)</span></div>
+                <div class="knob-action"><span class="knob-icon">↺</span> <span class="knob-value" style="color:var(--muted)">— (hw layer)</span></div>
                 <div class="knob-action"><span class="knob-icon">●</span> <span class="knob-value cmd-c">CLEAR</span></div>
             </div>
         </div>
@@ -321,21 +321,21 @@
 </div>
 
 <div class="note" id="note">
-    Layer 1 — tasti di uso quotidiano: numeri, operatori aritmetici base, incognita <code>x</code> e ENTER.
+    Layer 1 — everyday keys: numbers, basic arithmetic operators, unknown variable <code>x</code> and ENTER.
 </div>
 
 <div class="legend">
-    <div class="legend-item"><div class="legend-dot" style="background:#1e1e2e;border:1px solid #35354a"></div> Numeri</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#1e1e2a;border:1px solid #3a3a58"></div> Operatori</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#1e1a1e;border:1px solid #3a2838"></div> Comandi</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#1a1e1e;border:1px solid #28383a"></div> Navigazione</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#1e1e1a;border:1px solid #38381a"></div> Azioni (F13-F18)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1e1e2e;border:1px solid #35354a"></div> Numbers</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1e1e2a;border:1px solid #3a3a58"></div> Operators</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1e1a1e;border:1px solid #3a2838"></div> Commands</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1a1e1e;border:1px solid #28383a"></div> Navigation</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1e1e1a;border:1px solid #38381a"></div> Actions (F13-F18)</div>
 </div>
 
 <script>
 const layers = {
     1: {
-        note: "Layer 1 — tasti di uso quotidiano: numeri, operatori aritmetici base, incognita <code>x</code> e ENTER.",
+        note: "Layer 1 — everyday keys: numbers, basic arithmetic operators, unknown variable <code>x</code> and ENTER.",
         keys: [
             { label:"7",    type:"num",  phys:"1" },
             { label:"8",    type:"num",  phys:"2" },
@@ -356,10 +356,10 @@ const layers = {
         ]
     },
     2: {
-        note: "Layer 2 — operatori avanzati, frecce di navigazione cursore, simboli per equazioni e disequazioni.",
+        note: "Layer 2 — advanced operators, cursor navigation arrows, symbols for equations and inequalities.",
         keys: [
             { label:"^",    type:"op",  phys:"1" },
-            { label:"√",    type:"op",  phys:"2", sub:"radice" },
+            { label:"√",    type:"op",  phys:"2", sub:"root" },
             { label:"(",    type:"op",  phys:"3" },
             { label:")",    type:"op",  phys:"A" },
             { label:"<",    type:"op",  phys:"4" },
@@ -377,7 +377,7 @@ const layers = {
         ]
     },
     3: {
-        note: "Layer 3 — azioni matematiche mappate su F13–F18 (<code>0x68</code>–<code>0x6D</code>). L'ESP32 le intercetta in <code>keypad_ble_hid.py</code> e le converte in <code>KeypadAction</code> senza ambiguità con i caratteri normali.",
+        note: "Layer 3 — mathematical actions mapped to F13–F18 (<code>0x68</code>–<code>0x6D</code>). The ESP32 intercepts them in <code>keypad_ble_hid.py</code> and converts them to <code>KeypadAction</code> without ambiguity with normal characters.",
         keys: [
             { label:"simplify", type:"fn", phys:"1", sub:"F13" },
             { label:"expand",   type:"fn", phys:"2", sub:"F14" },

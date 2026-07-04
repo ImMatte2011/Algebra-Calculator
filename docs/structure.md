@@ -1,10 +1,10 @@
 # Project Structure
 
-- Cartelle separate per ESP32, RPi4 e Android: interpreti, toolchain e librerie diversi.
-- Una cartella per la documentazione (`docs/`).
-- Vedi [../README.md](../README.md) per la panoramica generale.
+- Separate folders for ESP32, RPi4 and Android: different interpreters, toolchains and libraries.
+- One folder for documentation (`docs/`).
+- See [../README.md](../README.md) for the general overview.
 
-## Albero del repository
+## Repository Tree
 
 ```
 .
@@ -20,8 +20,8 @@
 │
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml              # CI Python (backend_rpi4)
-│       └── android-ci.yml      # CI Android (android-app)
+│       ├── ci.yml              # Python CI (backend_rpi4)
+│       └── android-ci.yml      # Android CI (android-app)
 │
 ├── caddy/
 │   └── Caddyfile
@@ -29,7 +29,7 @@
 ├── scripts/
 │   └── deploy_esp32.py
 │
-├── android-app/                # App Android bridge BLE ↔ HTTP
+├── android-app/                # Android BLE ↔ HTTP bridge app
 │   ├── .gitignore
 │   ├── local.properties.example
 │   ├── build.gradle.kts
@@ -57,13 +57,13 @@
 │           │       ├── settings/
 │           │       │   └── AppSettings.kt
 │           │       └── ui/theme/
-│           ├── test/                       # unit test (JVM, no emulatore)
+│           ├── test/                       # unit tests (JVM, no emulator)
 │           │   └── java/com/myne/alg_calc/
 │           │       ├── ble/
 │           │       │   └── BlePacketParserTest.kt
 │           │       └── network/
 │           │           └── ApiServiceTest.kt
-│           └── androidTest/                # instrumented test (emulatore)
+│           └── androidTest/                # instrumented tests (emulator)
 │               └── java/com/myne/alg_calc/
 │                   └── ExampleInstrumentedTest.kt
 │
@@ -104,52 +104,46 @@
 ## Android — `android-app/`
 
 - Kotlin + Jetpack Compose
-- MVVM: `MainViewModel` orchestration, `BleManager` per il BLE, `ApiService`
-  (Retrofit) per il server
+- MVVM: `MainViewModel` orchestration, `BleManager` for BLE, `ApiService` (Retrofit) for the server
 
 ### `ble/`
-`BleManager`: connessione GATT, permessi runtime (Android 12+ vs precedenti),
-riconnessione automatica con backoff, esposizione stato come `StateFlow`.
-`BleConnectionState`: sealed class per lo stato tipizzato.
-`BlePacketParser`: parsing dei pacchetti-tupla Python inviati dall'ESP32.
+`BleManager`: GATT connection, runtime permissions (Android 12+ vs earlier), automatic reconnection with backoff, state exposed as `StateFlow`.
+`BleConnectionState`: sealed class for typed state.
+`BlePacketParser`: parsing of Python tuple packets sent by the ESP32.
 
 ### `network/`
-`ApiService`: client Retrofit con timeout espliciti, interceptor per il Bearer
-token (opzionale) e logging BASIC (non loga i corpi, per non esporre dati in
-Logcat).
+`ApiService`: Retrofit client with explicit timeouts, interceptor for the Bearer token (optional) and BASIC logging (does not log bodies, to avoid exposing data in Logcat).
 
 ### `settings/`
-`AppSettings`: configurazione persistita in SharedPreferences (MAC ESP32, URL
-RPi4, token API). Nessun valore reale hardcoded nel sorgente.
+`AppSettings`: configuration persisted in SharedPreferences (ESP32 MAC, RPi4 URL, API token). No real value hardcoded in the source.
 
 ### `data/`
-`MathRequest` / `MathResponse`: modelli JSON. `LogEntry`: log tipizzato per
-la UI (BLE_IN, BLE_OUT, NET_OUT, NET_IN, INFO, ERROR).
+`MathRequest` / `MathResponse`: JSON models. `LogEntry`: typed log for the UI (BLE_IN, BLE_OUT, NET_OUT, NET_IN, INFO, ERROR).
 
 ---
 
 ## ESP32 — `firmware_esp32/`
 
 - MicroPython
-- `ble/ble_bridge.py`: bridge BLE verso l'app Android
-- `drivers/`: LCD I2C, tastiera 4x4 a doppio SHIFT, scroller testo
-- `core/input_handler.py`: stato espressione, cursore, menu
-- `docs/`: mappa tastiera doppio SHIFT
+- `ble/ble_bridge.py`: BLE bridge to the Android app
+- `drivers/`: I2C LCD, 4x4 dual-SHIFT keypad, text scroller
+- `core/input_handler.py`: expression state, cursor, menu
+- `docs/`: dual-SHIFT keypad map
 
 ---
 
 ## Raspberry Pi 4 — `backend_rpi4/`
 
 - Python 3.11+ / FastAPI / SymPy
-- `main.py`: FastAPI app (`/solve`, `/status`)
-- `config.py`: `ACCESS_MODE` (`public` | `tailscale`) e `API_TOKEN`
-- `utils/validators.py`: verifica Bearer token condizionata da `ACCESS_MODE`
-- `math_engine/`: parser + solver SymPy per espressioni, equazioni, disequazioni
+- `main.py`: FastAPI app (endpoints `/solve`, `/toggle`, `/status`)
+- `config.py`: `ACCESS_MODE` (`public` | `tailscale`) and `API_TOKEN`
+- `utils/validators.py`: Bearer token verification conditioned on `ACCESS_MODE`
+- `math_engine/`: SymPy parser + solver for expressions, equations, inequalities
 
 ---
 
-## Altre cartelle
+## Other Folders
 
-- `docs/` — documentazione
-- `caddy/` — reverse proxy HTTPS (usato con `ACCESS_MODE=public`)
-- `scripts/` — `deploy_esp32.py`: genera `firmware_esp32/settings.py` da `.env.esp32`
+- `docs/` — documentation
+- `caddy/` — HTTPS reverse proxy (used with `ACCESS_MODE=public`)
+- `scripts/` — `deploy_esp32.py`: generates `firmware_esp32/settings.py` from `.env.esp32`

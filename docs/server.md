@@ -1,12 +1,10 @@
-# FastAPI server — Calc Algebraica (backend_rpi4)
+# FastAPI Server — Calc Algebraica (backend_rpi4)
 
-Server FastAPI che riceve un'espressione/equazione/disequazione e restituisce
-il risultato calcolato con SymPy. Pensato per girare su Raspberry Pi 4 dietro
-un reverse proxy HTTPS (vedi [deploy.md](deploy.md) e [network.md](network.md)).
+FastAPI server that receives an expression/equation/inequality and returns the result computed with SymPy. Designed to run on Raspberry Pi 4 behind an HTTPS reverse proxy (see [deploy.md](deploy.md) and [network.md](network.md)).
 
-## Installazione
+## Installation
 
-Consigliato dentro un virtualenv:
+Recommended inside a virtualenv:
 
 ```bash
 python -m venv .venv
@@ -14,28 +12,22 @@ source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Configurazione
+## Configuration
 
-Copia il file di esempio e modifica i valori:
+Copy the example file and edit the values:
 
 ```bash
 cp .env.example .env
-# poi modifica .env: API_TOKEN, ACCESS_MODE, API_HOST, API_PORT, LOG_LEVEL
+# then edit .env: API_TOKEN, ACCESS_MODE, API_HOST, API_PORT, LOG_LEVEL
 ```
 
-Per i dispositivi ESP32, copia invece `.env.esp32.example` e segui
-[esp32_settings.md](esp32_settings.md).
+For ESP32 devices, copy `.env.esp32.example` instead and follow [esp32_settings.md](esp32_settings.md).
 
-Il server legge la configurazione dalle variabili d'ambiente tramite
-`python-dotenv` (vedi `backend_rpi4/config.py`): non serve modificare il
-codice a mano.
+The server reads configuration from environment variables via `python-dotenv` (see `backend_rpi4/config.py`): no need to modify the code directly.
 
-`ACCESS_MODE` (`public` di default, oppure `tailscale`) decide se il Bearer
-token è obbligatorio — dettagli in [deploy.md](deploy.md#accesso-pubblico-vs-tailscale).
-In produzione (`ENV=production`) con `ACCESS_MODE=public`, l'avvio fallisce
-volutamente se `API_TOKEN` non è stato cambiato dal valore di default.
+`ACCESS_MODE` (`public` by default, or `tailscale`) determines whether the Bearer token is required — details in [deploy.md](deploy.md#access-public-vs-tailscale). In production (`ENV=production`) with `ACCESS_MODE=public`, startup intentionally fails if `API_TOKEN` has not been changed from its default value.
 
-## Avvio (sviluppo)
+## Start (development)
 
 ```bash
 uvicorn backend_rpi4.main:app --reload --host 127.0.0.1 --port 8000
@@ -49,24 +41,24 @@ uvicorn backend_rpi4.main:app --reload --host 127.0.0.1 --port 8000
   ```
   - `type`: `"expression"`, `"equation"` or `"inequality"`
   - `action` (only for `type: "expression"`): `"simplify"`, `"expand"` or `"factor"`
-- `GET /status` — returns `{ "status": "ok" }`
+- `POST /toggle` — body: `{ "active": true|false }`, enables/disables the service
+- `GET /status` — returns `{ "is_active": true|false }`
 
-Both endpoints require the `Authorization: Bearer <token>` header when
-`ACCESS_MODE=public` (default). When `ACCESS_MODE=tailscale`, the token check
-is skipped.
+All three require the `Authorization: Bearer <token>` header when `ACCESS_MODE=public` (default). When `ACCESS_MODE=tailscale` the check is skipped.
 
-## Note sul motore matematico
+> Note: `is_active` is a **global** state, shared by all clients — disabling the service disables it for everyone, not just the caller of `/toggle`. This is fine for personal use; if the service becomes multi-user in the future it will need to be made per-user/per-token.
 
-Il motore (`backend_rpi4/math_engine/`) **non gestisce integrali o
-derivate**: le richieste che li contengono restituiscono un errore.
+## Notes on the Math Engine
 
-## Test
+The engine (`backend_rpi4/math_engine/`) **does not handle integrals or derivatives**: requests containing them return an error.
+
+## Tests
 
 ```bash
 pytest backend_rpi4/tests -q
 ```
 
-oppure, usando la configurazione del repo:
+or, using the repo configuration:
 
 ```bash
 pytest -q

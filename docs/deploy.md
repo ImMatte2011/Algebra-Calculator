@@ -1,37 +1,27 @@
-# Deploy e sicurezza
+# Deploy and Security
 
-## Accesso: pubblico vs Tailscale
+## Access: Public vs Tailscale
 
-Il server supporta due modalità di esposizione **alternative**, scelte con
-la variabile `ACCESS_MODE` in `.env` (vedi `backend_rpi4/config.py` e
-`backend_rpi4/utils/validators.py`):
+The server supports two **alternative** exposure modes, chosen with the `ACCESS_MODE` variable in `.env` (see `backend_rpi4/config.py` and `backend_rpi4/utils/validators.py`):
 
-| `ACCESS_MODE` | Come si raggiunge il Pi | Bearer token (`API_TOKEN`) |
+| `ACCESS_MODE` | How the Pi is reached | Bearer token (`API_TOKEN`) |
 |---|---|---|
-| `public` *(default)* | Internet, dietro Caddy su `:443` | **Obbligatorio** su ogni richiesta |
-| `tailscale` | Solo dalla tua tailnet Tailscale | Non verificato (la tailnet è già il perimetro) |
+| `public` *(default)* | Internet, behind Caddy on `:443` | **Required** on every request |
+| `tailscale` | Only from your Tailscale tailnet | Not checked (the tailnet is already the perimeter) |
 
-Il default è `public` volutamente (fail-safe): se qualcuno dimentica di
-impostare la variabile, l'API richiede comunque un token invece di fidarsi
-implicitamente della rete.
+The default is `public` intentionally (fail-safe): if someone forgets to set the variable, the API still requires a token instead of implicitly trusting the network.
 
-In produzione (`ENV=production`) con `ACCESS_MODE=public`, l'avvio fallisce
-se `API_TOKEN` è ancora il valore di default — vedi `backend_rpi4/config.py`.
+In production (`ENV=production`) with `ACCESS_MODE=public`, startup fails if `API_TOKEN` is still the default value — see `backend_rpi4/config.py`.
 
-## 1) Environment e segreti
+## 1) Environment and Secrets
 
-- Non mettere mai segreti nel codice sorgente. Usa `.env` in locale e un
-  secrets manager in produzione.
-- In Docker, preferisci `env_file` o Docker secrets (per Swarm/Kubernetes
-  usa i secrets nativi).
-- In produzione imposta `ENV=production` e un `API_TOKEN` forte se usi
-  `ACCESS_MODE=public`.
+- Never put secrets in source code. Use `.env` locally and a secrets manager in production.
+- In Docker, prefer `env_file` or Docker secrets (for Swarm/Kubernetes use native secrets).
+- In production, set `ENV=production` and a strong `API_TOKEN` if using `ACCESS_MODE=public`.
 
 ## 2) Docker Compose
 
-Esempio (vedi `docker-compose.yml` nella root): build context sulla root del
-repo (il `Dockerfile` copia `requirements.txt` e `backend_rpi4/` da lì),
-segreti passati via `env_file` invece che hard-coded:
+Example (see `docker-compose.yml` in the root): build context at the repo root (the `Dockerfile` copies `requirements.txt` and `backend_rpi4/` from there), secrets passed via `env_file` instead of hardcoded:
 
 ```yaml
 services:
@@ -45,61 +35,46 @@ services:
       - .env
 ```
 
-## 3) TLS / Reverse proxy (Caddy)
+## 3) TLS / Reverse Proxy (Caddy)
 
-Metti l'API dietro un reverse proxy (Caddy, Traefik, Nginx) che ottiene e
-rinnova i certificati TLS automaticamente. Caddy è la scelta usata in questo
-progetto, soprattutto in combinazione con `ACCESS_MODE=public`.
+Put the API behind a reverse proxy (Caddy, Traefik, Nginx) that automatically obtains and renews TLS certificates. Caddy is the choice used in this project, especially in combination with `ACCESS_MODE=public`.
 
 `caddy/Caddyfile`:
 
 ```
-mio-dominio.duckdns.org {
+my-domain.duckdns.org {
     reverse_proxy 127.0.0.1:8000
 }
 ```
 
-Note:
-- Esponi verso l'esterno **solo** la porta `443/tcp`.
-- FastAPI resta in ascolto solo su `127.0.0.1:8000`, mai su `0.0.0.0:8000`,
-  così da Internet si vede solo Caddy.
-- Se il tuo IP di casa cambia, usa un DNS dinamico come DuckDNS.
+Notes:
+- Expose **only** port `443/tcp` externally.
+- FastAPI listens only on `127.0.0.1:8000`, never on `0.0.0.0:8000`, so only Caddy is visible from the internet.
+- If your home IP changes, use dynamic DNS such as DuckDNS.
 
-Se invece usi `ACCESS_MODE=tailscale`, Caddy/TLS pubblico non sono
-necessari: la tailnet fa già da canale cifrato e autenticato.
+If using `ACCESS_MODE=tailscale`, Caddy/public TLS is not needed: the tailnet already acts as an encrypted and authenticated channel.
 
 ## 4) Hardening
 
-- Bearer token required in `ACCESS_MODE=public` (see above; it protects
-  `/solve` and `/status` in `backend_rpi4/main.py`).
-- Limita il rate sugli endpoint (middleware o API gateway) — SymPy su input
-  arbitrari può essere un vettore di DoS.
-- Valida e sanitizza l'input su `/solve`.
-- Esegui l'app come utente non-root nei container.
+- Bearer token required in `ACCESS_MODE=public` (see above — linked to `/solve`, `/toggle`, `/status` in `backend_rpi4/main.py`).
+- Rate-limit the endpoints (middleware or API gateway) — SymPy on arbitrary input can be a DoS vector.
+- Validate and sanitise input on `/solve`.
+- Run the app as a non-root user in containers.
 
-## 5) Logging e monitoring
+## 5) Logging and Monitoring
 
-- Invia i log a un sistema centralizzato (ELK, Promtail + Loki) o usa
-  logging cloud.
-- Aggiungi endpoint di health/metrics; raccogli con Prometheus se
-  disponibile.
+- Ship logs to a centralised system (ELK, Promtail + Loki) or use cloud logging.
+- Add health/metrics endpoints; collect with Prometheus if available.
 
 ## 6) CI/CD
 
-- La CI (`.github/workflows/ci.yml`) builda ed esegue i test
-  (`pytest backend_rpi4 -q`) ad ogni push/PR su `main`.
-- Inietta i segreti dalla piattaforma (GitHub Actions secrets, Vault, ecc.),
-  mai hard-coded.
+- CI (`.github/workflows/ci.yml`) builds and runs tests (`pytest backend_rpi4 -q`) on every push/PR to `main`.
+- Inject secrets from the platform (GitHub Actions secrets, Vault, etc.), never hardcoded.
 
-## 7) Backup e rollback
+## 7) Backup and Rollback
 
-- Versiona le immagini Docker e mantieni i rollback semplici: usa tag e
-  rideploya il tag precedente in caso di problemi.
+- Version Docker images and keep rollbacks simple: use tags and redeploy the previous tag if something goes wrong.
 
-## 8) Dati sensibili nel repository
+## 8) Sensitive Data in the Repository
 
-Verifica che `docs/` non contenga file con IP reali, hostname, percorsi di
-chiavi SSH o altri dati identificativi prima di pubblicare o condividere il
-repository. Se file simili sono già stati committati, vanno rimossi anche
-dalla cronologia Git (`git filter-repo` + force-push), non solo cancellati
-nell'ultimo commit.
+Verify that `docs/` does not contain files with real IPs, hostnames, SSH key paths, or other identifying data before publishing or sharing the repository. If such files have already been committed, they must be removed from Git history as well (`git filter-repo` + force-push), not just deleted in the latest commit.

@@ -1,12 +1,11 @@
 # Setup and Configuration
 
-Guida rapida passo-passo. Per i dettagli di ogni componente vedi i
-documenti linkati.
+Quick step-by-step guide. For details on each component see the linked documents.
 
 ## RPi 4
 
-1. Installare Python 3.11+.
-2. Creare un ambiente virtuale:
+1. Install Python 3.11+.
+2. Create a virtual environment:
 
 ```bash
 python -m venv venv
@@ -14,55 +13,49 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-3. Copiare `.env.example` in `.env` e impostare `API_TOKEN` e
-   `ACCESS_MODE` (vedi [deploy.md](deploy.md)).
-4. Avviare l'API:
+3. Copy `.env.example` to `.env` and set `API_TOKEN` and `ACCESS_MODE` (see [deploy.md](deploy.md)).
+4. Start the API:
 
 ```bash
 uvicorn backend_rpi4.main:app --host 127.0.0.1 --port 8000
 ```
 
-Dettagli completi: [server.md](server.md).
+Full details: [server.md](server.md).
 
 ## ESP32
 
-1. Copiare i file MicroPython di `firmware_esp32/` sull'ESP32.
-2. Configurare il display OLED/LCD e il keypad secondo i pin in
-   `firmware_esp32/config.py`.
-3. Se disponibile, installare il modulo `ssd1306` (o l'equivalente per il
-   proprio display).
-4. Generare `firmware_esp32/settings.py` da `.env.esp32` — vedi
-   [esp32_settings.md](esp32_settings.md).
-5. Eseguire `main.py` dall'ESP32.
+1. Copy the MicroPython files from `firmware_esp32/` to the ESP32.
+2. Configure the OLED/LCD display and keypad according to the pins in `firmware_esp32/config.py`.
+3. If available, install the `ssd1306` module (or the equivalent for your display).
+4. Generate `firmware_esp32/settings.py` from `.env.esp32` — see [esp32_settings.md](esp32_settings.md).
+5. Run `main.py` on the ESP32.
 
-## Telefono Android
+## Android Phone
 
-1. Creare un bridge BLE che riceve l'input dall'ESP32.
-2. Inviare la richiesta a `https://<server>/solve` con l'header
-   `Authorization: Bearer <token>` (solo se `ACCESS_MODE=public`).
-3. Restituire il risultato all'ESP32.
+1. Create a BLE bridge that receives input from the ESP32.
+2. Send the request to `https://<server>/solve` with the header `Authorization: Bearer <token>` (only if `ACCESS_MODE=public`).
+3. Return the result to the ESP32.
 
-Details: [network.md](network.md).
+Details: [phone_bridge.md](phone_bridge.md).
 
 ## Docker
 
-1. Costruire l'immagine:
+1. Build the image:
 
 ```bash
 docker compose build
 ```
 
-2. Avviare i servizi:
+2. Start the services:
 
 ```bash
 docker compose up
 ```
 
-## Caddy / HTTPS (solo se `ACCESS_MODE=public`)
+## Caddy / HTTPS (only if `ACCESS_MODE=public`)
 
-1. Configurare `caddy/Caddyfile` con il reverse proxy verso
-   `127.0.0.1:8000`.
-2. Esporre solo la porta `443`.
-3. Usare DNS dinamico (es. DuckDNS) se l'IP cambia.
+1. Configure `caddy/Caddyfile` with the reverse proxy pointing to `127.0.0.1:8000`.
+2. Expose only port `443`.
+3. Use dynamic DNS (e.g. DuckDNS) if your IP changes.
 
-Dettagli: [deploy.md](deploy.md).
+Details: [deploy.md](deploy.md).

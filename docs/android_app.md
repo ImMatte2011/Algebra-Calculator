@@ -1,56 +1,39 @@
-# App Android — Bridge BLE ↔ HTTP (`android-app/`)
+# Android App — BLE ↔ HTTP Bridge (`android-app/`)
 
-L'app fa da ponte tra l'ESP32 (BLE) e il server FastAPI sul Raspberry Pi
-(HTTP/HTTPS): riceve l'espressione via BLE, la inoltra a `/solve`, e rimanda
-il risultato all'ESP32 via BLE per visualizzarlo sul display LCD.
+The app acts as a bridge between the ESP32 (BLE) and the FastAPI server on the Raspberry Pi (HTTP/HTTPS): it receives the expression via BLE, forwards it to `/solve`, and sends the result back to the ESP32 via BLE for display on the LCD.
 
-Vedi [network.md](network.md) per l'architettura generale e
-[server.md](server.md) per il contratto dell'API.
+See [phone_bridge.md](phone_bridge.md) for the overall architecture and [server.md](server.md) for the API contract.
 
-## Stack e architettura
+## Stack and Architecture
 
 - **Kotlin** + **Jetpack Compose**
-- **MVVM**: `MainViewModel` (logica), `BleManager` (BLE), `ApiService`
-  (HTTP Retrofit), `AppSettings` (configurazione)
-- **Coroutines + Flow**: pipeline BLE → HTTP → risposta senza callback
-  annidate; lo stato è esposto come `StateFlow<UiState>` — la UI non ha
-  logica, solo osserva e reagisce
-- `BleConnectionState` sealed class: lo stato BLE è tipizzato, non una
-  stringa di log — la UI può reagire con colori/pulsanti diversi per
-  ogni stato
+- **MVVM**: `MainViewModel` (logic), `BleManager` (BLE), `ApiService` (HTTP Retrofit), `AppSettings` (configuration)
+- **Coroutines + Flow**: BLE → HTTP → response pipeline without nested callbacks; state is exposed as `StateFlow<UiState>` — the UI has no logic, it only observes and reacts
+- `BleConnectionState` sealed class: BLE state is typed, not a log string — the UI can react (colours, buttons) differently for each state
 
-## Configurazione e segreti
+## Configuration and Secrets
 
-Tutti i valori configurabili (MAC dell'ESP32, URL del RPi, token API)
-sono persistiti in **SharedPreferences** tramite `AppSettings` e modificabili
-dalla schermata impostazioni dentro l'app. **Nessun valore reale è
-hardcoded nel sorgente.**
+All configurable values (ESP32 MAC address, RPi URL, API token) are persisted in **SharedPreferences** via `AppSettings` and can be modified from the in-app settings screen. **No real value is hardcoded in the source.**
 
-Alla prima apertura, l'app mostra uno stato "non configurato" finché
-l'utente non imposta almeno il MAC e l'URL.
+On first launch, the app shows a "not configured" state until the user sets at least the MAC address and the URL.
 
-### Token API (`apiToken`)
+### API Token (`apiToken`)
 
-Il token Bearer è opzionale lato app — viene aggiunto all'header
-`Authorization: Bearer <token>` solo se non è vuoto. Questo permette
-di usare la stessa app con entrambe le modalità server:
+The Bearer token is optional on the app side — it is added to the `Authorization: Bearer <token>` header only if non-empty. This allows the same app to work with both server modes:
 
-- `ACCESS_MODE=public` (Caddy su HTTPS): imposta il token nelle impostazioni
-- `ACCESS_MODE=tailscale` (rete Tailscale): lascia il token vuoto
+- `ACCESS_MODE=public` (Caddy on HTTPS): set the token in the settings
+- `ACCESS_MODE=tailscale` (Tailscale network): leave the token field empty
 
 ### `local.properties`
 
-Contiene il percorso all'Android SDK — generato automaticamente da Android
-Studio, non va mai committato (già escluso da `.gitignore`). Un file
-`local.properties.example` committato serve da template.
+Contains the path to the Android SDK — generated automatically by Android Studio, must never be committed (already excluded by `.gitignore`). A committed `local.properties.example` file serves as a template.
 
-## Permessi Bluetooth
+## Bluetooth Permissions
 
-La gestione varia tra versioni Android, ed è già implementata in
-`BleManager.requiredPermissions()`:
+Handling varies across Android versions and is already implemented in `BleManager.requiredPermissions()`:
 
 ```kotlin
-// BleManager.kt — già implementato
+// BleManager.kt — already implemented
 fun requiredPermissions(): Array<String> =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(BLUETOOTH_SCAN, BLUETOOTH_CONNECT)        // Android 12+
@@ -59,97 +42,84 @@ fun requiredPermissions(): Array<String> =
     }
 ```
 
-Il Manifest dichiara entrambi i set. `BLUETOOTH_SCAN` usa
-`android:usesPermissionFlags="neverForLocation"` per evitare che il sistema
-pensi che l'app usi il BLE per geolocalizzazione.
+The Manifest declares both sets. `BLUETOOTH_SCAN` uses `android:usesPermissionFlags="neverForLocation"` to prevent the system from assuming the app uses BLE for geolocation.
 
 ## `android:usesCleartextTraffic="true"`
 
-Attualmente presente nel Manifest per permettere HTTP in chiaro verso il
-Raspberry Pi via Tailscale (la cifratura è a livello rete, non applicativo).
-Se/quando si passa a `ACCESS_MODE=public` con Caddy su HTTPS, questo flag
-va rimosso (o ristretto a soli host locali via `network_security_config.xml`).
+Currently present in the Manifest to allow plain HTTP to the Raspberry Pi over Tailscale (encryption is at the network layer, not application layer). If/when switching to `ACCESS_MODE=public` with Caddy on HTTPS, this flag should be removed (or restricted to local hosts only via `network_security_config.xml`).
 
-## Test automatici
+## Automated Tests
 
-### Unit test — `app/src/test/` (JVM, senza emulatore)
+### Unit tests — `app/src/test/` (JVM, no emulator)
 
-Girano velocemente in CI senza emulatore. Coprono la logica pura:
+Run quickly in CI without an emulator. Cover pure logic:
 
-- **`BlePacketParserTest`**: parsing di tutti i formati di pacchetti BLE
-  (equazione, disequazione, espressione con azione, parentesi nell'espressione,
-  casi di errore)
-- **`ApiServiceTest`**: client HTTP con `MockWebServer` — verifica che il
-  token sia aggiunto correttamente all'header, gestione 200/401/timeout
+- **`BlePacketParserTest`**: parsing of all BLE packet formats (equation, inequality, expression with action, parentheses in expression, error cases)
+- **`ApiServiceTest`**: HTTP client with `MockWebServer` — verifies the token is correctly added to the header, handles 200/401/timeout
 
-Per aggiungerli: vedi [Come aggiungere i test](#come-aggiungere-i-test).
+To add them: see [How to add tests](#how-to-add-tests).
 
-### Instrumented test — `app/src/androidTest/` (emulatore)
+### Instrumented tests — `app/src/androidTest/` (emulator)
 
-Il vero hardware BLE non è testabile in CI headless. Strategia:
-- La UI e il `ViewModel` si testano con un `FakeBleManager` che implementa
-  la stessa interfaccia di `BleManager` (da implementare quando l'architettura
-  si consolida)
-- Il test con hardware BLE reale rimane manuale, su device fisico
+Real BLE hardware is not testable in headless CI. Strategy:
+- The UI and `ViewModel` are tested with a `FakeBleManager` implementing the same interface as `BleManager` (to be implemented when the architecture stabilises)
+- Testing with real BLE hardware remains manual, on a physical device
 
 ### CI
 
-Workflow dedicato `.github/workflows/android-ci.yml` — separato da quello
-Python, si triggera solo quando cambiano file in `android-app/`:
+Dedicated workflow `.github/workflows/android-ci.yml` — separate from the Python one, triggered only when files in `android-app/` change:
 
 ```
-git push  →  cambia android-app/  →  android-ci.yml esegue testDebugUnitTest + lintDebug
-git push  →  cambia backend_rpi4/ →  ci.yml esegue pytest
+git push  →  changes android-app/  →  android-ci.yml runs testDebugUnitTest + lintDebug
+git push  →  changes backend_rpi4/ →  ci.yml runs pytest
 ```
 
-## Come aggiungere i test
+## How to Add Tests
 
-### 1. Dipendenze di test (`app/build.gradle.kts`)
+### 1. Test dependencies (`app/build.gradle.kts`)
 
-Aggiungi nelle `dependencies {}` (le due righe di `testImplementation`
-sono quelle nuove — le altre sono già presenti):
+Add inside `dependencies {}` (the two `testImplementation` lines are the new ones — the others are already present):
 
 ```kotlin
 dependencies {
-    // ... dipendenze esistenti ...
+    // ... existing dependencies ...
     testImplementation(libs.junit)
 
-    // MockWebServer per testare il client HTTP senza server reale
+    // MockWebServer to test the HTTP client without a real server
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 
-    // Coroutines test per testare suspend functions
+    // Coroutines test to test suspend functions
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }
 ```
 
-### 2. Crea i file di test
+### 2. Create the test files
 
-Posizionali esattamente in questi percorsi (crea le cartelle se non esistono):
+Place them exactly at these paths (create directories if they don't exist):
 
 ```
 android-app/app/src/test/java/com/myne/alg_calc/ble/BlePacketParserTest.kt
 android-app/app/src/test/java/com/myne/alg_calc/network/ApiServiceTest.kt
 ```
 
-Il contenuto di entrambi è nei file scaricabili — vedi la sezione
-"Test automatici" nel repo.
+The content of both is in the downloadable files — see the "Automated Tests" section in the repo.
 
-### 3. Esegui i test
+### 3. Run the tests
 
 ```bash
 cd android-app
 
-# Tutti i unit test
+# All unit tests
 ./gradlew testDebugUnitTest
 
-# Solo un file specifico
+# Single file only
 ./gradlew testDebugUnitTest --tests "com.myne.alg_calc.ble.BlePacketParserTest"
 
 # Lint
 ./gradlew lintDebug
 ```
 
-In Android Studio: clic destro su un file di test → "Run".
+In Android Studio: right-click a test file → "Run".
 
-I risultati HTML sono in:
+HTML results are in:
 `app/build/reports/tests/testDebugUnitTest/index.html`
