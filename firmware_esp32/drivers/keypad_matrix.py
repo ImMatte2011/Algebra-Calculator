@@ -4,7 +4,7 @@ from config import CONFIG
 from drivers.keypad_base import KeypadBase, KeypadAction
 
 class KeypadMatrix(KeypadBase):
-    """Astrazione del tastierino matriciale con modalità SHIFT_A / SHIFT_B e debounce."""
+    """Matrix keypad abstraction with SHIFT_A / SHIFT_B modes and debounce."""
 
     DEFAULT_KEY_MATRIX = [
         ["K_1", "K_2", "K_3", "K_SHIFT"],
@@ -18,13 +18,13 @@ class KeypadMatrix(KeypadBase):
         self.cols = [Pin(pin, Pin.IN, Pin.PULL_UP) for pin in col_pins]
         self.key_matrix = key_matrix or self.DEFAULT_KEY_MATRIX
         
-        # Carica le mappe passate o quelle da config.py
+        # Load the maps passed in or those from config.py
         keypad_cfg = CONFIG.get("KEYPAD", {})
         self.primary_map = primary_map or keypad_cfg.get("PRIMARY_MAP")
         self.shift_a_map = shift_a_map or keypad_cfg.get("SHIFT_A_MAP")
         self.shift_b_map = shift_b_map or keypad_cfg.get("SHIFT_B_MAP")
         
-        self.shift_mode = None  # Può essere: None, "A", "B"
+        self.shift_mode = None  # Can be: None, "A", or "B"
         self.debounce_ms = CONFIG.get("KEY_DEBOUNCE_MS", 50)
         self._last_raw = None
         self._last_time = time.ticks_ms()
@@ -44,7 +44,7 @@ class KeypadMatrix(KeypadBase):
         return None
 
     def update(self):
-        """Restituisce una chiave stabile dopo il debounce, oppure None."""
+        """Returns a stable key after debounce, or None."""
         raw_key = self._scan_raw()
         current_time = time.ticks_ms()
 
@@ -66,7 +66,7 @@ class KeypadMatrix(KeypadBase):
         return None
 
     def _translate_key(self, physical_key):
-        """Traduce il tasto fisico in un valore o un comando interno in base al doppio Shift."""
+        """Translates the physical key to a value or internal command based on the double Shift mode."""
         if self.shift_mode == "A":
             mapped = self.shift_a_map.get(physical_key)
         elif self.shift_mode == "B":
@@ -77,7 +77,7 @@ class KeypadMatrix(KeypadBase):
         if mapped is None:
             return None
 
-        # Gestione atomica del cambio stato dei due SHIFT
+        # Atomic handling of the two SHIFT state changes
         if mapped == "CMD_SHIFT_A":
             self.shift_mode = None if self.shift_mode == "A" else "A"
             return KeypadAction.SHIFT_A
@@ -85,7 +85,7 @@ class KeypadMatrix(KeypadBase):
             self.shift_mode = None if self.shift_mode == "B" else "B"
             return KeypadAction.SHIFT_B
 
-        # Mappatura dei comandi standard CMD_ ai relativi KeypadAction
+        # Mapping of standard CMD_ commands to the corresponding KeypadAction values
         cmd_map = {
             "CMD_ENTER": KeypadAction.ENTER,
             "CMD_BACKSPACE": KeypadAction.BACKSPACE,
@@ -101,7 +101,7 @@ class KeypadMatrix(KeypadBase):
         if mapped in cmd_map:
             return cmd_map[mapped]
 
-        # Altrimenti restituisce il carattere testuale ('x', '(', '+', ecc.)
+        # Otherwise return the textual character ('x', '(', '+', etc.)
         return mapped
 
     def reset_shift(self):

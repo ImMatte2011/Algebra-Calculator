@@ -1,19 +1,19 @@
 """
-oled_display.py — Driver display OLED per ESP32 (MicroPython).
+oled_display.py — OLED display driver for ESP32 (MicroPython).
 
-Supporta:
-  Controller: SSD1309, SSD1306 (stesso set di comandi), SH1106
-  Interfaccia: SPI (default, per SSD1309) o I2C (per SSD1306)
-  Risoluzione: 128×64 (configurabile)
+Supports:
+  Controller: SSD1309, SSD1306 (same command set), SH1106
+  Interface: SPI (default for SSD1309) or I2C (for SSD1306)
+  Resolution: 128×64 (configurable)
 
-Tutto configurabile in config.py → CONFIG["OLED"] senza toccare questo file.
-Estende DisplayBase per compatibilità con il resto del firmware.
+Everything is configurable in config.py → CONFIG["OLED"] without touching this file.
+Extends DisplayBase for compatibility with the rest of the firmware.
 
-Esempio config SPI (SSD1309, hardware attuale):
+Example SPI config (SSD1309, current hardware):
     "OLED": { "BUS": "SPI", "CONTROLLER": "SSD1309", "WIDTH": 128, "HEIGHT": 64,
               "SCK_PIN": 18, "MOSI_PIN": 23, "DC_PIN": 21, "CS_PIN": 5, "RST_PIN": 22 }
 
-Esempio config I2C (SSD1306):
+Example I2C config (SSD1306):
     "OLED": { "BUS": "I2C", "CONTROLLER": "SSD1306", "WIDTH": 128, "HEIGHT": 64,
               "SCL_PIN": 22, "SDA_PIN": 21, "I2C_ADDR": 0x3C }
 """
@@ -26,7 +26,7 @@ from drivers.oled_glyphs import split_with_glyphs, GLYPH_WIDTH
 from config import CONFIG
 
 # ---------------------------------------------------------------------------
-# Sequenza di inizializzazione SSD1306/SSD1309
+# SSD1306/SSD1309 initialization sequence
 # ---------------------------------------------------------------------------
 _INIT_SSD1306 = bytes([
     0xAE,         # display off
@@ -42,12 +42,12 @@ _INIT_SSD1306 = bytes([
     0x81, 0xCF,   # set contrast
     0xD9, 0xF1,   # set pre-charge period
     0xDB, 0x40,   # set VCOMH deselect level
-    0xA4,         # entire display ON (normal, segue RAM)
-    0xA6,         # set normal display (non invertito)
+    0xA4,         # entire display ON (normal, follows RAM)
+    0xA6,         # set normal display (not inverted)
     0xAF,         # display ON
 ])
 
-# SH1106: simile a SSD1306 ma usa page addressing con offset +2
+# SH1106: similar to SSD1306 but uses page addressing with offset +2
 _INIT_SH1106 = bytes([
     0xAE,
     0xD5, 0x80,
@@ -69,23 +69,23 @@ _INIT_SH1106 = bytes([
 
 class OledDisplay(DisplayBase):
     """
-    Display OLED 128×64. Pixel-addressable, più flessibile dell'LCD.
+    OLED display 128×64. Pixel-addressable, more flexible than the LCD.
 
-    Metodi disponibili:
-      clear()                   → cancella tutto il display
-      show_text(text, line)     → testo su una riga (0 o 1 per font 8px, 0-7 per font 8px)
-      show_text_large(text, y)  → testo 16px in posizione y assoluta (pixel)
-      draw_pixel(x, y, color)   → accende/spegne un pixel
-      draw_hline(x, y, w)       → linea orizzontale
-      draw_rect(x, y, w, h)     → rettangolo
-      fill_rect(x, y, w, h)     → rettangolo pieno
-      show()                    → trasferisce il framebuffer al display (richiesto dopo draw_*)
-      show_loading()            → schermata di avvio
+    Available methods:
+      clear()                   → clears the entire display
+      show_text(text, line)     → text on a row (0 or 1 for 8px font, 0-7 for 8px font)
+      show_text_large(text, y)  → 16px text at absolute y position (pixels)
+      draw_pixel(x, y, color)   → turns a pixel on/off
+      draw_hline(x, y, w)       → horizontal line
+      draw_rect(x, y, w, h)     → rectangle
+      fill_rect(x, y, w, h)     → filled rectangle
+      show()                    → flushes the framebuffer to the display (required after draw_*)
+      show_loading()            → startup screen
     """
 
-    CHAR_W  = 8    # larghezza carattere font built-in (pixel)
-    CHAR_H  = 8    # altezza carattere font built-in
-    CHAR_W2 = 16   # font grande (2×)
+    CHAR_W  = 8    # built-in font character width (pixels)
+    CHAR_H  = 8    # built-in font character height (pixels)
+    CHAR_W2 = 16   # large font (2×)
     CHAR_H2 = 16
 
     def __init__(self):
@@ -95,7 +95,7 @@ class OledDisplay(DisplayBase):
         self._controller = cfg.get("CONTROLLER", "SSD1309").upper()
         self._bus_type   = cfg.get("BUS", "SPI").upper()
 
-        # Framebuffer: MONO_VLSB è il formato usato da SSD1306/SSD1309/SH1106
+        # Framebuffer: MONO_VLSB is the format used by SSD1306/SSD1309/SH1106
         self._buf = bytearray(self.width * self.height // 8)
         self._fb  = framebuf.FrameBuffer(self._buf, self.width, self.height, framebuf.MONO_VLSB)
 
@@ -108,7 +108,7 @@ class OledDisplay(DisplayBase):
         self.clear()
 
     # -----------------------------------------------------------------------
-    # Inizializzazione bus
+    # Bus initialization
     # -----------------------------------------------------------------------
     def _init_spi(self, cfg):
         self._dc  = Pin(cfg["DC_PIN"],  Pin.OUT)
@@ -145,7 +145,7 @@ class OledDisplay(DisplayBase):
         self._write_data = self._write_data_i2c
 
     # -----------------------------------------------------------------------
-    # Scrittura low-level SPI
+    # Low-level SPI write
     # -----------------------------------------------------------------------
     def _write_cmd_spi(self, cmd):
         self._dc.value(0)
@@ -160,20 +160,20 @@ class OledDisplay(DisplayBase):
         self._cs.value(1)
 
     # -----------------------------------------------------------------------
-    # Scrittura low-level I2C
+    # Low-level I2C write
     # -----------------------------------------------------------------------
     def _write_cmd_i2c(self, cmd):
         self._i2c.writeto(self._i2c_addr, bytes([0x00, cmd]))
 
     def _write_data_i2c(self, data):
-        # Prefisso 0x40 = co-bit=0, D/C=1 (data)
+        # Prefix 0x40 = co-bit=0, D/C=1 (data)
         buf = bytearray(len(data) + 1)
         buf[0] = 0x40
         buf[1:] = data
         self._i2c.writeto(self._i2c_addr, buf)
 
     # -----------------------------------------------------------------------
-    # Sequenza init controller
+    # Controller init sequence
     # -----------------------------------------------------------------------
     def _send_init(self):
         seq = _INIT_SH1106 if self._controller == "SH1106" else _INIT_SSD1306
@@ -182,7 +182,7 @@ class OledDisplay(DisplayBase):
 
     # -----------------------------------------------------------------------
     # Flush framebuffer → display
-    # SH1106 usa page addressing con offset colonna +2
+    # SH1106 uses page addressing with column offset +2
     # -----------------------------------------------------------------------
     def show(self):
         if self._controller == "SH1106":
@@ -214,16 +214,16 @@ class OledDisplay(DisplayBase):
 
     def show_text(self, text, line=0):
         """
-        Scrive testo su una riga logica di 8px.
-        line 0 = riga in cima, line 7 = riga in fondo (per display 64px).
-        Sovrascrive solo quella riga, non tocca il resto del buffer.
+        Writes text on a logical 8px row.
+        line 0 = top row, line 7 = bottom row (for a 64px display).
+        Only that row is overwritten; the rest of the buffer is left unchanged.
         """
         y = line * self.CHAR_H
         if y + self.CHAR_H > self.height:
             return
-        # Cancella solo la riga
+        # Clear only that row
         self._fb.fill_rect(0, y, self.width, self.CHAR_H, 0)
-        # Tronca a larghezza display
+        # Truncate to the display width
         max_chars = self.width // self.CHAR_W
         self._fb.text(text[:max_chars], 0, y, 1)
         self.show()
@@ -235,19 +235,19 @@ class OledDisplay(DisplayBase):
         self.show()
 
     # -----------------------------------------------------------------------
-    # API aggiuntiva (rispetto a LCD)
+    # Additional API (compared to LCD)
     # -----------------------------------------------------------------------
     def show_text_large(self, text, y=0):
         """
-        Testo 16×16px usando due righe di font 8px sovrapposte con scaling 2×.
-        Semplice scaling: ogni riga originale viene disegnata 2 volte in altezza.
+        16×16px text using two 8px font rows overlaid with 2× scaling.
+        Simple scaling: each original row is drawn twice in height.
         """
         self._fb.fill_rect(0, y, self.width, self.CHAR_H2, 0)
         for i, char in enumerate(text):
             x = i * self.CHAR_W2
             if x + self.CHAR_W2 > self.width:
                 break
-            # Disegna il carattere due volte con offset di 1px → effetto bold/large
+            # Draw the character twice with a 1px offset → bold/large effect
             self._fb.text(char, x,     y,     1)
             self._fb.text(char, x + 1, y + 1, 1)
         self.show()
@@ -269,25 +269,25 @@ class OledDisplay(DisplayBase):
 
     def show_expr_and_status(self, expr_text, status_text=""):
         """
-        Layout tipico per la calcolatrice:
-        riga 0-1: espressione (eventualmente su 2 righe)
-        riga 7:   status / shift mode
+        Typical calculator layout:
+        row 0-1: expression (possibly on 2 rows)
+        row 7:   status / shift mode
         """
         self._fb.fill(0)
         max_chars = self.width // self.CHAR_W
-        # Riga 0: primi N caratteri dell'espressione
+        # Row 0: first N characters of the expression
         self._fb.text(expr_text[:max_chars], 0, 0, 1)
-        # Riga 1: overflow dell'espressione (se lunga)
+        # Row 1: expression overflow (if long)
         if len(expr_text) > max_chars:
             self._fb.text(expr_text[max_chars:max_chars*2], 0, 8, 1)
-        # Riga 7 (in fondo): status
+        # Row 7 (at the bottom): status
         if status_text:
             self._fb.fill_rect(0, self.height - 8, self.width, 8, 0)
             self._fb.text(status_text[:max_chars], 0, self.height - 8, 1)
         self.show()
     
     def _draw_glyph_bitmap(self, bitmap, x, y):
-        """Disegna un bitmap 8x8 (bytes, un byte per riga) a partire da (x,y)."""
+        """Draws an 8x8 bitmap (bytes, one byte per row) starting at (x,y)."""
         for row in range(8):
             byte = bitmap[row]
             for col in range(8):
@@ -296,10 +296,10 @@ class OledDisplay(DisplayBase):
  
     def show_text_glyphs(self, text, line=0):
         """
-        Come show_text(), ma sostituisce le sottostringhe note (sqrt(, <=,
-        >=, !=) con i bitmap corrispondenti invece di stamparle come testo.
-        L'espressione sottostante (in InputHandler) resta invariata: questo
-        metodo tocca solo il rendering, non i dati.
+        Like show_text(), but replaces the known substrings (sqrt(, <=,
+        >=, !=) with the corresponding bitmaps instead of printing them as text.
+        The underlying expression (in InputHandler) remains unchanged: this
+        method only affects rendering, not the data.
         """
         y = line * self.CHAR_H
         if y + self.CHAR_H > self.height:
@@ -320,9 +320,9 @@ class OledDisplay(DisplayBase):
         self.show()
  
     def show_expr_and_status_glyphs(self, expr_text, status_text=""):
-        """Variante con glifi di show_expr_and_status(). Usare questa per
-        mostrare l'espressione quando si vogliono i simboli matematici resi
-        come bitmap invece che come testo ASCII (es. sqrt(, <=, >=, !=)."""
+        """Glyph variant of show_expr_and_status(). Use this to show the expression
+        when you want mathematical symbols rendered as bitmaps instead of ASCII text
+        (e.g. sqrt(, <=, >=, !=)."""
         self._fb.fill(0)
         max_chars = self.width // self.CHAR_W
  
@@ -334,7 +334,7 @@ class OledDisplay(DisplayBase):
                 x = 0
                 y += self.CHAR_H
                 if y + self.CHAR_H > self.height - self.CHAR_H:
-                    break  # lascia l'ultima riga libera per lo status
+                    break  # leave the last row free for the status
             if kind == "glyph":
                 self._draw_glyph_bitmap(content, x, y)
             else:
@@ -348,10 +348,32 @@ class OledDisplay(DisplayBase):
         self.show()
 
     def invert(self, invert=True):
-        """Inverte i colori del display (utile per segnalare errori)."""
+        """Inverts the display colors (useful for signaling errors)."""
         self._write_cmd(0xA7 if invert else 0xA6)
 
     def set_contrast(self, value):
-        """Imposta la luminosità (0-255)."""
+        """Sets the brightness (0-255)."""
         self._write_cmd(0x81)
         self._write_cmd(value & 0xFF)
+
+    def render(self, expr, cursor_pos, status="", result=None, is_menu=False,
+               menu_top="", menu_bottom=""):
+        if is_menu:
+            self._fb.fill(0)
+            self._fb.text("Type/Action:", 0, 0, 1)
+            self._fb.text(menu_top, 0, 16, 1)
+            self._fb.text(menu_bottom, 0, 24, 1)
+            self._fb.text("CLR=cancel", 0, 56, 1)
+            self.show()
+        elif result is not None:
+            self._fb.fill(0)
+            self._fb.text("Result:", 0, 0, 1)
+            self.show_text_large(result[:8], y=12)
+            self._fb.text(result[8:], 0, 28, 1)
+            self._fb.text(status, 0, 56, 1)
+            self.show()
+        else:
+            if CONFIG["OLED"].get("USE_GLYPHS", True):
+                self.show_expr_and_status_glyphs(expr, status)
+            else:
+                self.show_expr_and_status(expr, status)

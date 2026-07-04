@@ -98,7 +98,6 @@
     ├── esp32_settings.md
     ├── deploy.md
     ├── network.md
-    ├── phone_bridge.md
     └── setup_and_configure.md
 ```
 
@@ -142,7 +141,7 @@ la UI (BLE_IN, BLE_OUT, NET_OUT, NET_IN, INFO, ERROR).
 ## Raspberry Pi 4 — `backend_rpi4/`
 
 - Python 3.11+ / FastAPI / SymPy
-- `main.py`: app FastAPI (endpoint `/solve`, `/toggle`, `/status`)
+- `main.py`: FastAPI app (`/solve`, `/status`)
 - `config.py`: `ACCESS_MODE` (`public` | `tailscale`) e `API_TOKEN`
 - `utils/validators.py`: verifica Bearer token condizionata da `ACCESS_MODE`
 - `math_engine/`: parser + solver SymPy per espressioni, equazioni, disequazioni

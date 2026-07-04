@@ -17,21 +17,21 @@ ops_map = {
     "<=": "le",
 }
 
-def parse_input(text, type_requested, action_requested=None, valore_x=None):
+def parse_input(text, type_requested, action_requested=None, x_value=None):
     try:
         text = text.replace(" ", "").strip().lower()
 
-        # Disequazione
+        # Inequality
         if type_requested == "inequality":
             if not any(op in text for op in ops):
-                return {"error": "Operatore di disequazione non trovato"}
+                return {"error": "Inequality operator not found"}
 
             for op in sorted(ops, key=len, reverse=True):
                 if op in text:
                     sx, dx = text.split(op, 1)
 
-                    if sx.strip() == "" or dx.strip() =="":
-                        return {"error": "Disequazione incompleta"}
+                    if sx.strip() == "" or dx.strip() == "":
+                        return {"error": "Incomplete inequality"}
 
                     sx = parse_expr(sx, transformations=trans)
                     dx = parse_expr(dx, transformations=trans)
@@ -49,10 +49,10 @@ def parse_input(text, type_requested, action_requested=None, valore_x=None):
             if "=" in text:
                 sx, dx = text.split("=", 1)
             else:
-                sx, dx = text, "0"  # Se non c'è '=', consideriamo l'equazione come se fosse "= 0"
+                sx, dx = text, "0"  # If there is no '=', treat it as an equation equal to 0
 
             if sx.strip() == "" or dx.strip() == "":
-                return {"error": "Equazione incompleta"}
+                return {"error": "Incomplete equation"}
 
             sx_parsed = parse_expr(sx, transformations=trans)
             dx_parsed = parse_expr(dx, transformations=trans)
@@ -61,21 +61,20 @@ def parse_input(text, type_requested, action_requested=None, valore_x=None):
 
         elif type_requested == "expression":
             if "=" in text or any(op in text for op in ops):
-                return {"error": "Un'espressione non deve contenere '=' o segni di disequazione"}
+                return {"error": "An expression must not contain '=' or inequality signs"}
             
             parsed_expr = parse_expr(text, transformations=trans)
             return {
                 "type": "expression",
                 "value": parsed_expr,
                 "action": action_requested,
-                "valore_x": valore_x
+                "x_value": x_value
             }
 
         else:
-            return {"error": f"Type requested non valido: {type_requested}"}
-            # Non dovrebbe capitare mai perché il telefono fa da bridge
-            # e dovrebbe sempre inviare un type valido, 
-            # ma è meglio gestire anche questo caso
+            return {"error": f"Invalid type requested: {type_requested}"}
+            # This should never happen because the phone bridge is expected
+            # to always send a valid type, but we handle it defensively.
 
     except Exception as e:
         return {"error": str(e)}

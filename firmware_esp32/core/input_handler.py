@@ -1,20 +1,20 @@
 """
-input_handler.py — Gestione stato dell'espressione e preparazione pacchetti.
+input_handler.py — Manages the expression state and prepares packets.
 
-Compatibile con entrambi i tipi di tastierino:
-  Matrix 4x4:  l'utente preme ENTER → menu interattivo (type → action)
-  Macropad BLE: Layer 3 invia ACTION_SIMPLIFY / TYPE_EQUATION / ecc.
-                direttamente → pacchetto pronto senza menu
+Compatible with both keypad types:
+  Matrix 4x4: the user presses ENTER → interactive menu (type → action)
+  BLE Macropad: Layer 3 sends ACTION_SIMPLIFY / TYPE_EQUATION / etc.
+                directly → a ready packet without a menu
 """
 
 from drivers.keypad_base import KeypadAction
 
 
 class InputHandler:
-    """Gestisce lo stato dell'espressione e prepara il pacchetto dati."""
+    """Manages the expression state and prepares the data packet."""
 
-    # Menu interattivo (usato con matrix keypad o con Layer 3 TYPE_EXPRESSION
-    # che richiede ancora la scelta dell'azione)
+    # Interactive menu (used with the matrix keypad or with Layer 3 TYPE_EXPRESSION,
+    # which still requires an action choice)
     REQUEST_TYPE_MENU = {
         "1": "expression",
         "2": "equation",
@@ -37,21 +37,21 @@ class InputHandler:
         self.expression_action = None
 
     # -----------------------------------------------------------------------
-    # Entry point principale
+    # Main entry point
     # -----------------------------------------------------------------------
     def process_key(self, key):
         """
-        Gestisce un KeypadAction o carattere.
-        Restituisce:
-          None          → solo aggiornamento stato display (expr modificata)
-          dict          → evento UI (menu_open, menu_choice, menu_cancelled, ecc.)
-          tuple         → pacchetto pronto (expression, type, action, val)
+        Handles a KeypadAction or a character.
+        Returns:
+          None          → display state update only (expr changed)
+          dict          → UI event (menu_open, menu_choice, menu_cancelled, etc.)
+          tuple         → ready packet (expression, type, action, val)
         """
         if key is None:
             return None
 
         # ---------------------------------------------------------------
-        # Layer 3 macropad BLE: azioni dirette senza menu
+        # Layer 3 BLE macropad: direct actions without a menu
         # ---------------------------------------------------------------
         if key == KeypadAction.ACTION_SIMPLIFY:
             return self._direct_packet("expression", "simplify")
@@ -69,37 +69,37 @@ class InputHandler:
             return self._direct_packet("inequality")
 
         if key == KeypadAction.TYPE_EXPRESSION:
-            # Espressione senza azione specificata → apri solo il sotto-menu azione
+            # Expression without a specific action: open the action submenu only.
             self.waiting_menu = True
             self.menu_stage   = "expression_action"
             self.menu_choice  = None
             return {"menu_open": True, "prompt": self.get_menu_prompt()}
 
-        # Gestione simbolo di radice (layer 2) 
+        # Square-root symbol handling (layer 2).
         if key == KeypadAction.SQRT:
             self._insert_char("sqrt(")
             return None
 
         # ---------------------------------------------------------------
-        # Menu interattivo (matrix keypad o TYPE_EXPRESSION da Layer 3)
+        # Interactive menu (matrix keypad or TYPE_EXPRESSION from Layer 3)
         # ---------------------------------------------------------------
         if self.waiting_menu:
             return self._handle_menu_key(key)
 
         # ---------------------------------------------------------------
-        # Editing normale
+        # Normal editing
         # ---------------------------------------------------------------
         return self._handle_edit_key(key)
 
     # -----------------------------------------------------------------------
-    # Pacchetto diretto (Layer 3 BLE macropad)
+    # Direct packet (Layer 3 BLE macropad)
     # -----------------------------------------------------------------------
     def _direct_packet(self, request_type, action=None):
-        """Prepara e restituisce il pacchetto senza aprire menu."""
+        """Prepares and returns the packet without opening a menu."""
         if not self.expr.strip():
             return {"menu_error": "empty_expression"}
         packet = self.prepare_packet(request_type, act=action)
-        # Non resettiamo: l'utente potrebbe voler correggere e reinviare
+        # Do not reset: the user might want to edit and resend
         return packet
 
     # -----------------------------------------------------------------------
@@ -113,7 +113,7 @@ class InputHandler:
         elif key == KeypadAction.CLEAR:
             self.reset()
         elif key == KeypadAction.ENTER:
-            # ENTER con matrix keypad apre il menu completo
+            # ENTER on the matrix keypad opens the full menu
             self.waiting_menu = True
             self.menu_stage   = "type"
             self.menu_choice  = None
@@ -125,20 +125,20 @@ class InputHandler:
         elif key in (KeypadAction.UP, KeypadAction.DOWN,
                      KeypadAction.SHIFT, KeypadAction.SHIFT_A,
                      KeypadAction.SHIFT_B):
-            pass   # gestiti altrove o ignorati
+            pass   # handled elsewhere or ignored
         elif isinstance(key, str):
             self._insert_char(key)
         return None
 
     # -----------------------------------------------------------------------
-    # Menu interattivo
+    # Interactive menu
     # -----------------------------------------------------------------------
     def _handle_menu_key(self, key):
         if key == KeypadAction.CLEAR:
             self.cancel_menu()
             return {"menu_cancelled": True}
 
-        # Selezione con numero
+        # Selection by number
         if isinstance(key, str):
             if self.menu_stage == "type" and key in self.REQUEST_TYPE_MENU:
                 self.menu_choice = key
@@ -147,7 +147,7 @@ class InputHandler:
                 self.menu_choice = key
                 return {"menu_choice": self.menu_choice}
 
-        # Conferma con ENTER
+        # Confirm with ENTER
         if key == KeypadAction.ENTER:
             if self.menu_choice is None:
                 return {"menu_error": "select_type"}
@@ -190,11 +190,11 @@ class InputHandler:
         self.cursor_pos = max(0, min(self.cursor_pos + delta, len(self.expr)))
 
     # -----------------------------------------------------------------------
-    # Pacchetto
+    # Packet
     # -----------------------------------------------------------------------
     def prepare_packet(self, request_type, act=None, val=None):
         if request_type is None:
-            raise ValueError("request_type deve essere fornito")
+            raise ValueError("request_type must be provided")
         if request_type != "expression":
             act = None
             val = None

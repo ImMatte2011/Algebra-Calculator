@@ -1,24 +1,23 @@
 """
-oled_glyphs.py — Bitmap 8x8 per simboli matematici non presenti nel font
-ASCII built-in di framebuf (sqrt, <=, >=, !=).
+oled_glyphs.py — 8x8 bitmaps for mathematical symbols not present in the
+built-in framebuf ASCII font (sqrt, <=, >=, !=).
 
-Questi bitmap sono usati SOLO per il rendering sull'OLED — l'espressione
-salvata in InputHandler resta sempre testo puro ("sqrt(", "<=", ">=", "!=").
-Nessun altro file deve essere modificato per aggiungere/cambiare un glifo:
-basta editare GLYPHS qui sotto.
+These bitmaps are used ONLY for OLED rendering — the expression stored in
+InputHandler remains plain text ("sqrt(", "<=", ">=", "!="). No other file
+needs to be changed to add or update a glyph; just edit GLYPHS below.
 
-Formato: ogni glifo è una lista di 8 byte, un byte per riga, bit più
-significativo = pixel più a sinistra (MSB-first, come framebuf.MONO_VLSB
-letto riga per riga). Per generare nuovi bitmap si possono usare tool web
-tipo "8x8 LED matrix bitmap generator" e incollare l'output qui.
+Format: each glyph is a list of 8 bytes, one byte per row, with the most
+significant bit as the leftmost pixel (MSB-first, like framebuf.MONO_VLSB
+read row by row). To generate new bitmaps, you can use web tools such as the
+"8x8 LED matrix bitmap generator" and paste the output here.
 
-Pattern: la chiave è la sottostringa esatta da sostituire nel testo quando
-viene visualizzata. L'ordine di match è quello di inserimento del dict,
-quindi le sottostringhe più lunghe vanno messe per prime (es. "sqrt("
-prima di eventuali pattern più corti che potrebbero sovrapporsi).
+Pattern: the key is the exact substring to replace in the text when it is
+rendered. Matching order follows dictionary insertion order, so longer
+substrings should go first (for example, "sqrt(" before shorter patterns that
+might overlap).
 """
 
-# Radice quadrata (√) — tratto ascendente + vinculum orizzontale
+# Square root (√) — ascending stroke + horizontal vinculum
 _SQRT = bytes([
     0b00000011,
     0b00000100,
@@ -30,7 +29,7 @@ _SQRT = bytes([
     0b00100000,
 ])
 
-# Minore o uguale (≤)
+# Less than or equal (≤)
 _LE = bytes([
     0b00000000,
     0b00000110,
@@ -42,7 +41,7 @@ _LE = bytes([
     0b00001100,
 ])
 
-# Maggiore o uguale (≥)
+# Greater than or equal (≥)
 _GE = bytes([
     0b00000000,
     0b01100000,
@@ -54,7 +53,7 @@ _GE = bytes([
     0b00110000,
 ])
 
-# Diverso (≠)
+# Not equal (≠)
 _NE = bytes([
     0b00000010,
     0b00000100,
@@ -66,9 +65,9 @@ _NE = bytes([
     0b01000000,
 ])
 
-# Mappa: sottostringa nel testo → bitmap 8x8.
-# "sqrt(" è 5 caratteri ma occupa UN solo glifo (8px) sul display —
-# risparmia spazio utile su un OLED 128px di larghezza.
+# Map: substring in text → 8x8 bitmap.
+# "sqrt(" is 5 characters but occupies ONE glyph (8px) on the display —
+# it saves useful space on a 128px-wide OLED.
 GLYPHS = {
     "sqrt(": _SQRT,
     "<=":    _LE,
@@ -82,10 +81,10 @@ GLYPH_HEIGHT = 8
 
 def split_with_glyphs(text):
     """
-    Divide `text` in una lista di segmenti (str, "char") o (bytes, "glyph"),
-    nell'ordine in cui appaiono. Usata da OledDisplay per il rendering.
+    Splits `text` into a list of segments (str, "char") or (bytes, "glyph"),
+    in the order they appear. Used by OledDisplay for rendering.
 
-    Esempio:
+    Example:
         split_with_glyphs("x<=5")
         → [("x", "char"), (_LE, "glyph"), ("5", "char")]
     """

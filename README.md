@@ -1,92 +1,97 @@
-# Calcolatrice Algebrica — ESP32 + Raspberry Pi
+# Calc Algebraica - ESP32 + Android + Raspberry Pi
 
-Calcolatrice algebrica con tastiera/display su ESP32, che invia le espressioni
-via BLE a un telefono Android (bridge), il quale le inoltra via HTTPS a un
-server FastAPI su Raspberry Pi 4 (nel mio caso) dove SymPy risolve equazioni,
-disequazioni ed espressioni.
+Personal algebra calculator with keypad/display input on ESP32, an Android BLE
+bridge, and a Raspberry Pi 4 FastAPI backend powered by SymPy.
 
+```text
+ESP32 keypad/display
+        |
+        | BLE
+        v
+Android app
+        |
+        | HTTP/HTTPS, configured in the app
+        v
+Raspberry Pi 4 (FastAPI + SymPy)
+        |
+        | result
+        v
+Android app -> BLE -> ESP32 display
 ```
-ESP32 (tastiera + display)
-       │  BLE
-       ▼
-App Android (bridge)
-       │  HTTP/HTTPS
-       ▼
-RPi (FastAPI + SymPy)
-       │  (risposta)
-       ▼
-App Android ──► ESP32 (display)
-```
 
-> Progetto personale, ancora in sviluppo attivo — vedi
-> [CONTRIBUTING.md](CONTRIBUTING.md) per lo stato attuale riguardo a
-> contributi esterni.
+The ESP32 does not call the Raspberry Pi directly over WiFi. The Android app
+bridges BLE packets to the backend. Public HTTPS with Caddy, DuckDNS, and a
+bearer token is used only when the backend runs with `ACCESS_MODE=public`.
 
-## Struttura del repository
+> Personal project, still under active development. See
+> [CONTRIBUTING.md](CONTRIBUTING.md) for the current policy on external
+> contributions.
 
-```
+## Repository Structure
+
+```text
 .
-├── android-app/         # App Android bridge BLE ↔ HTTP (Kotlin + Compose)
-├── backend_rpi4/         # Server FastAPI + motore algebrico (SymPy)
-├── firmware_esp32/       # Firmware MicroPython per l'ESP32
-├── caddy/                # Configurazione reverse proxy HTTPS
-├── docs/                 # Documentazione di progetto
-├── scripts/              # Script di utilità (deploy ESP32)
+├── android-app/          # Android BLE <-> HTTP bridge (Kotlin + Compose)
+├── backend_rpi4/         # FastAPI server + SymPy algebra engine
+├── firmware_esp32/       # ESP32 MicroPython firmware
+├── caddy/                # HTTPS reverse proxy config for public mode
+├── docs/                 # Project documentation
+├── scripts/              # Utility scripts, including ESP32 deployment
 ├── docker-compose.yml
 └── requirements.txt
 ```
 
-Dettaglio completo: [docs/structure.md](docs/structure.md)
+Full details: [docs/structure.md](docs/structure.md)
 
-## Documentazione
+## Documentation
 
 - **Server (RPi4 / FastAPI)**: [docs/server.md](docs/server.md)
-- **Impostazioni ESP32**: [docs/esp32_settings.md](docs/esp32_settings.md)
-- **Architettura di rete e sicurezza**: [docs/network.md](docs/network.md)
-- **Bridge telefono Android**: [docs/android_app.md](docs/android_app.md)
-- **Installazione app Android**: [docs/install_android.md](docs/install_android.md)
-- **Deploy e sicurezza (Caddy, Docker, accesso pubblico vs Tailscale)**: [docs/deploy.md](docs/deploy.md)
-- **Setup completo passo-passo**: [docs/setup_and_configure.md](docs/setup_and_configure.md)
-- **Struttura del progetto**: [docs/structure.md](docs/structure.md)
+- **ESP32 settings**: [docs/esp32_settings.md](docs/esp32_settings.md)
+- **Network architecture and security**: [docs/network.md](docs/network.md)
+- **Android bridge**: [docs/android_app.md](docs/android_app.md)
+- **Android install**: [docs/install_android.md](docs/install_android.md)
+- **Deploy and security**: [docs/deploy.md](docs/deploy.md)
+- **Step-by-step setup**: [docs/setup_and_configure.md](docs/setup_and_configure.md)
+- **Project structure**: [docs/structure.md](docs/structure.md)
 
-## Quick start
+## Quick Start
+
 ### Server (RPi)
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env               # poi imposta API_TOKEN e ACCESS_MODE
+cp .env.example .env               # then set API_TOKEN and ACCESS_MODE
 uvicorn backend_rpi4.main:app --reload --host 127.0.0.1 --port 8000
-# Esegui i tests per verificare il corretto funzionamento del server
 pytest backend_rpi4/tests -q
 ```
 
-### App Android
+### Android App
 
-Apri `android-app/` in Android Studio. Alla prima apertura dell'app configura
-dalla schermata impostazioni: indirizzo MAC dell'ESP32, URL del Raspberry Pi
-(con porta), e il token API se il server gira con `ACCESS_MODE=public`.
+Open `android-app/` in Android Studio. On first launch, configure the ESP32 MAC
+address, the Raspberry Pi backend URL, and the API token if the backend uses
+`ACCESS_MODE=public`.
 
 ```bash
 cd android-app
-./gradlew testDebugUnitTest   # unit test (JVM, no emulatore)
+./gradlew testDebugUnitTest
 ./gradlew lintDebug
 ```
 
-## Accesso: pubblico vs Tailscale
+## Access Modes
 
-Il server supporta due modalità di esposizione alternative, scelte tramite
-la variabile d'ambiente `ACCESS_MODE` (vedi [docs/deploy.md](docs/deploy.md)
-per i dettagli):
+The backend supports two alternative access modes through `ACCESS_MODE`:
 
-| `ACCESS_MODE` | Infrastruttura | Token obbligatorio |
+| `ACCESS_MODE` | Backend exposure | Token |
 |---|---|---|
-| `public` *(default)* | Caddy su `:443`, IP pubblico + DuckDNS | Sì (`API_TOKEN`) |
-| `tailscale` | Solo dentro la tailnet Tailscale | No |
+| `public` *(default)* | Caddy on `:443`, public IP/domain such as DuckDNS | Yes (`API_TOKEN`) |
+| `tailscale` | Only inside the Tailscale tailnet | No |
 
-## Licenza
+The ESP32 side is unchanged in both modes: ESP32 -> BLE -> Android phone.
 
-Vedi [LICENSE](LICENSE) — codice proprietario, "tutti i diritti
-riservati". Non è una libreria open source: il repo è pubblico a scopo
-dimostrativo/portfolio.
+## License
+
+See [LICENSE](LICENSE). This is proprietary code with all rights reserved. The
+repository is public for demonstration/portfolio purposes, not as an open
+source library.

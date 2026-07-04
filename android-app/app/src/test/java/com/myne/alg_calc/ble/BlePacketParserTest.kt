@@ -5,25 +5,25 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * Unit test per BlePacketParser.
+ * Unit tests for BlePacketParser.
  *
- * BlePacketParser parsa i pacchetti BLE inviati dall'ESP32 (MicroPython),
- * che sono la rappresentazione stringa di una tupla Python, es:
+ * BlePacketParser parses BLE packets sent by the ESP32 (MicroPython),
+ * which are the string representation of a Python tuple, e.g:
  *   ('x^2-1=0', 'equation', None, None)
- *   ('x>3', 'disequation', None, None)
+ *   ('x>3', 'inequality', None, None)
  *   ('x^2+2x', 'expression', 'simplify', None)
  *
- * I test coprono: i casi normali, le espressioni con parentesi legittime
- * (sin(x), (x+1)/2), i tipi riconosciuti e le eccezioni attese.
+ * The tests cover normal cases, expressions with valid parentheses
+ * (sin(x), (x+1)/2), recognized types, and expected exceptions.
  */
 class BlePacketParserTest {
 
     // -------------------------------------------------------------------------
-    // Casi normali
+    // Normal cases
     // -------------------------------------------------------------------------
 
     @Test
-    fun `parse semplice equazione`() {
+    fun `parse simple equation`() {
         val result = BlePacketParser.parse("('x^2-1=0', 'equation', None, None)")
         assertEquals("x^2-1=0", result.expression)
         assertEquals("equation", result.type)
@@ -31,7 +31,7 @@ class BlePacketParserTest {
     }
 
     @Test
-    fun `parse equazione lineare`() {
+    fun `parse linear equation`() {
         val result = BlePacketParser.parse("('2*x+3=7', 'equation', None, None)")
         assertEquals("2*x+3=7", result.expression)
         assertEquals("equation", result.type)
@@ -39,29 +39,29 @@ class BlePacketParserTest {
     }
 
     @Test
-    fun `parse disequazione gt`() {
-        val result = BlePacketParser.parse("('x>1', 'disequation', None, None)")
+    fun `parse inequality gt`() {
+        val result = BlePacketParser.parse("('x>1', 'inequality', None, None)")
         assertEquals("x>1", result.expression)
-        // "disequation" viene normalizzato in "inequality" per l'API del RPi
+        // "inequality" is normalized for the RPi API
         assertEquals("inequality", result.type)
         assertNull(result.action)
     }
 
     @Test
-    fun `parse disequazione gte`() {
-        val result = BlePacketParser.parse("('x>=0', 'disequation', None, None)")
+    fun `parse inequality gte`() {
+        val result = BlePacketParser.parse("('x>=0', 'inequality', None, None)")
         assertEquals("inequality", result.type)
     }
 
     @Test
-    fun `parse inequality type gia normalizzato`() {
-        // Se il firmware mandasse direttamente "inequality" va comunque bene
+    fun `parse already normalized inequality type`() {
+        // If firmware sends "inequality" directly, it still works
         val result = BlePacketParser.parse("('x<5', 'inequality', None, None)")
         assertEquals("inequality", result.type)
     }
 
     @Test
-    fun `parse expression con action simplify`() {
+    fun `parse expression with action simplify`() {
         val result = BlePacketParser.parse("('x^2+2*x', 'expression', 'simplify', None)")
         assertEquals("x^2+2*x", result.expression)
         assertEquals("expression", result.type)
@@ -69,54 +69,54 @@ class BlePacketParserTest {
     }
 
     @Test
-    fun `parse expression con action factor`() {
+    fun `parse expression with action factor`() {
         val result = BlePacketParser.parse("('x^2-1', 'expression', 'factor', None)")
         assertEquals("factor", result.action)
     }
 
     @Test
-    fun `parse expression con action expand`() {
+    fun `parse expression with action expand`() {
         val result = BlePacketParser.parse("('(x+1)*(x-1)', 'expression', 'expand', None)")
         assertEquals("expand", result.action)
     }
 
     // -------------------------------------------------------------------------
-    // Espressioni con parentesi legittime (caso critico documentato nel parser)
+    // Expressions with legitimate parentheses (critical case documented in parser)
     // -------------------------------------------------------------------------
 
     @Test
-    fun `parse espressione con parentesi nell espressione`() {
-        // Le parentesi in (x+1)/2 non devono essere confuse con quelle della tupla
+    fun `parse expression with parentheses inside expression`() {
+        // Parentheses in (x+1)/2 should not be confused with tuple delimiters
         val result = BlePacketParser.parse("('(x+1)/2', 'expression', 'simplify', None)")
         assertEquals("(x+1)/2", result.expression)
     }
 
     @Test
-    fun `parse espressione con funzione sin`() {
+    fun `parse expression with sin function`() {
         val result = BlePacketParser.parse("('sin(x)+1=0', 'equation', None, None)")
         assertEquals("sin(x)+1=0", result.expression)
         assertEquals("equation", result.type)
     }
 
     @Test
-    fun `parse espressione con piu parentesi annidate`() {
+    fun `parse expression with nested parentheses`() {
         val result = BlePacketParser.parse("('((x+1)+(x+2))=10', 'equation', None, None)")
         assertEquals("((x+1)+(x+2))=10", result.expression)
     }
 
     @Test
-    fun `parse espressione con doppi apici dentro singoli`() {
-        // Python usa doppi apici se l'espressione contiene un apice singolo
+    fun `parse expression with double quotes inside single quotes`() {
+        // Python uses double quotes if the expression contains a single quote
         val result = BlePacketParser.parse("(\"x+1\", 'equation', None, None)")
         assertEquals("x+1", result.expression)
     }
 
     // -------------------------------------------------------------------------
-    // Formato senza None (pacchetto minimo a 2 campi)
+    // Format without None (minimum 2-field packet)
     // -------------------------------------------------------------------------
 
     @Test
-    fun `parse pacchetto con solo espressione e tipo`() {
+    fun `parse packet with only expression and type`() {
         val result = BlePacketParser.parse("('x+1=0', 'equation')")
         assertEquals("x+1=0", result.expression)
         assertEquals("equation", result.type)
@@ -124,47 +124,47 @@ class BlePacketParserTest {
     }
 
     // -------------------------------------------------------------------------
-    // Normalizzazione tipo
+    // Type normalization
     // -------------------------------------------------------------------------
 
     @Test
-    fun `tipo equation case insensitive`() {
+    fun `equation type case insensitive`() {
         val result = BlePacketParser.parse("('x=1', 'Equation', None, None)")
         assertEquals("equation", result.type)
     }
 
     @Test
-    fun `tipo disequation case insensitive`() {
-        val result = BlePacketParser.parse("('x>0', 'Disequation', None, None)")
+    fun `inequality type case insensitive`() {
+        val result = BlePacketParser.parse("('x>0', 'Inequality', None, None)")
         assertEquals("inequality", result.type)
     }
 
     // -------------------------------------------------------------------------
-    // Casi di errore — devono lanciare BlePacketParseException
+    // Error cases — must throw BlePacketParseException
     // -------------------------------------------------------------------------
 
     @Test(expected = BlePacketParseException::class)
-    fun `pacchetto vuoto lancia eccezione`() {
+    fun `empty packet throws exception`() {
         BlePacketParser.parse("")
     }
 
     @Test(expected = BlePacketParseException::class)
-    fun `pacchetto con solo spazi lancia eccezione`() {
+    fun `packet with only spaces throws exception`() {
         BlePacketParser.parse("   ")
     }
 
     @Test(expected = BlePacketParseException::class)
-    fun `pacchetto con un solo campo lancia eccezione`() {
+    fun `packet with single field throws exception`() {
         BlePacketParser.parse("('x+1=0')")
     }
 
     @Test(expected = BlePacketParseException::class)
-    fun `tipo non riconosciuto lancia eccezione`() {
+    fun `unknown type throws exception`() {
         BlePacketParser.parse("('x+1', 'unknowntype', None, None)")
     }
 
     @Test(expected = BlePacketParseException::class)
-    fun `espressione vuota lancia eccezione`() {
+    fun `empty expression throws exception`() {
         BlePacketParser.parse("('', 'equation', None, None)")
     }
 }

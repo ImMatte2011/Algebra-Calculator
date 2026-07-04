@@ -47,19 +47,13 @@ uvicorn backend_rpi4.main:app --reload --host 127.0.0.1 --port 8000
   ```json
   { "expression": "x^2-1=0", "type": "equation", "action": null }
   ```
-  - `type`: `"expression"`, `"equation"` o `"inequality"`
-  - `action` (solo per `type: "expression"`): `"simplify"`, `"expand"` o `"factor"`
-- `POST /toggle` — body: `{ "active": true|false }`, abilita/disabilita il servizio
-- `GET /status` — restituisce `{ "is_active": true|false }`
+  - `type`: `"expression"`, `"equation"` or `"inequality"`
+  - `action` (only for `type: "expression"`): `"simplify"`, `"expand"` or `"factor"`
+- `GET /status` — returns `{ "status": "ok" }`
 
-Tutti e tre richiedono l'header `Authorization: Bearer <token>` quando
-`ACCESS_MODE=public` (default). Quando `ACCESS_MODE=tailscale` il controllo
-viene saltato.
-
-> Nota: `is_active` è uno stato **globale**, condiviso da tutti i client —
-> disattivare il servizio lo disattiva per chiunque lo usi, non solo per chi
-> ha chiamato `/toggle`. Va bene per uso personale; se in futuro il
-> servizio diventa multi-utente andrà reso per-utente/per-token.
+Both endpoints require the `Authorization: Bearer <token>` header when
+`ACCESS_MODE=public` (default). When `ACCESS_MODE=tailscale`, the token check
+is skipped.
 
 ## Note sul motore matematico
 

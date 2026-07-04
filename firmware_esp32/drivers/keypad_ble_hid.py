@@ -1,10 +1,10 @@
 """
-keypad_ble_hid.py — Driver BLE HID central per MINI-KEYBOARD.
+keypad_ble_hid.py — BLE HID central driver for MINI-KEYBOARD.
 
-Implementa KeypadBase connettendosi al macropad come BLE central (client).
-Mappa ricavata da hid_mapper.py sul dispositivo reale (E0:0F:7A:C3:C9:DF).
+Implements KeypadBase by connecting to the macropad as a BLE central client.
+Mapping derived from hid_mapper.py for the real device (E0:0F:7A:C3:C9:DF).
 
-Usato quando CONFIG["KEYPAD_TYPE"] == "ble_hid".
+Used when CONFIG["KEYPAD_TYPE"] == "ble_hid".
 """
 
 import ubluetooth
@@ -16,17 +16,18 @@ from utils import logger
 _MAC = CONFIG["BLE_KP_MAC"]
 
 _UUID_HID_SERVICE = ubluetooth.UUID(0x1812)
-_UUID_HID_REPORT  = ubluetooth.UUID(0x2A4D)
-_UUID_BOOT_MOUSE  = ubluetooth.UUID(0x2A33)
-_UUID_CCCD        = ubluetooth.UUID(0x2902)
-_NOTIFY_ENABLE    = b'\x01\x00'
+_UUID_HID_REPORT      = ubluetooth.UUID(0x2A4D)
+_UUID_BOOT_KEYBOARD   = ubluetooth.UUID(0x2A22)
+_UUID_BOOT_MOUSE      = ubluetooth.UUID(0x2A33)
+_UUID_CCCD            = ubluetooth.UUID(0x2902)
+_NOTIFY_ENABLE        = b'\x03\x00'  # notify + indicate
 
 _MOD_SHIFT = 0x22   # LSHIFT | RSHIFT
 
 # ---------------------------------------------------------------------------
-# Caratteri (senza_shift, con_shift) — solo i keycode realmente usati dal
-# macropad, confermati da hid_mapper.py. Nessuna tabella alfabetica
-# completa: non serve, il macropad non manda lettere libere.
+# Characters (without_shift, with_shift) — only the keycodes actually used by
+# the macropad, confirmed by hid_mapper.py. No full alphabet table is needed;
+# the macropad does not send free letters.
 # ---------------------------------------------------------------------------
 _HID_CHAR = {
     # Numpad (Layer 1)
@@ -35,10 +36,10 @@ _HID_CHAR = {
     0x5F: ('7', '7'), 0x60: ('8', '8'), 0x61: ('9', '9'),
     0x62: ('0', '0'),
     0x57: ('+', '+'), 0x56: ('-', '-'), 0x55: ('*', '*'), 0x54: ('/', '/'),
-    0x1B: ('x', 'x'),   # incognita
+    0x1B: ('x', 'x'),   # unknown variable
 
-    # Layer 2 — simboli ed equazioni
-    0x23: ('6', '^'),   # SHIFT+6 → ^ (esponente)
+    # Layer 2 — symbols and equations
+    0x23: ('6', '^'),   # SHIFT+6 → ^ (exponent)
     0x26: ('9', '('),   # SHIFT+9 → (
     0x27: ('0', ')'),   # SHIFT+0 → )
     0x36: (',', '<'),   # SHIFT+, → <
@@ -47,7 +48,7 @@ _HID_CHAR = {
     0x1E: ('1', '!'),   # SHIFT+1 → !
 }
 
-# Azioni di controllo — indipendenti dal modifier
+# Control actions — independent of modifier
 _HID_ACTION = {
     0x28: KeypadAction.ENTER,    # numpad ENTER
     0x29: KeypadAction.CLEAR,    # ESC (anche click knob 3)
@@ -59,9 +60,9 @@ _HID_ACTION = {
     0x52: KeypadAction.UP,
 }
 
-# F-key azioni matematiche dirette (Layer 3).
-# F1-F6 assegnate alle 6 azioni; F7-F16 libere per espansioni future.
-# F17 (0x6C) riservata a SQRT (sostituisce la vecchia macro testuale "sqrt").
+# Direct math F-key actions (Layer 3).
+# F1-F6 are assigned to the 6 actions; F7-F16 are free for future expansion.
+# F17 (0x6C) is reserved for SQRT (replacing the old textual macro "sqrt").
 _HID_FN = {
     0x3A: KeypadAction.ACTION_SIMPLIFY,   # F1
     0x3B: KeypadAction.ACTION_EXPAND,     # F2
@@ -75,7 +76,7 @@ _HID_FN = {
 
 
 def _decode(keycode, modifier):
-    """Converte (keycode, modifier) in KeypadAction o carattere. None = ignora."""
+    """Converts (keycode, modifier) to a KeypadAction or character. None = ignore."""
     if keycode == 0:
         return None
     if keycode in _HID_FN:
@@ -93,7 +94,7 @@ def _decode(keycode, modifier):
 # Driver BLE HID Central
 # ---------------------------------------------------------------------------
 class KeypadBleHid(KeypadBase):
-    """Tastierino BLE HID come BLE central. Riconnessione automatica."""
+    """BLE HID keypad as BLE central. Automatic reconnection."""
 
     _IRQ_PERIPHERAL_CONNECT           = 7
     _IRQ_PERIPHERAL_DISCONNECT        = 8
@@ -108,14 +109,17 @@ class KeypadBleHid(KeypadBase):
 
     RECONNECT_DELAY_MS = 3000
 
-    def __init__(self, ble_instance=None):
+    def __init__(self, ble_instance=None, register_irq=True):
         if ble_instance:
             self._ble = ble_instance
         else:
             self._ble = ubluetooth.BLE()
             self._ble.active(True)
-        self._ble.irq(self._irq)
-
+    
+        if register_irq:
+            self._ble.irq(self._irq)
+        # If register_irq=False, the dispatcher in main.py calls handle_irq()
+    
         self._conn              = None
         self._phase             = "idle"
         self._event_queue       = []
@@ -126,13 +130,21 @@ class KeypadBleHid(KeypadBase):
         self._current_char_idx  = 0
         self._last_disconnect_ms = 0
         self.on_state_change    = None
-
+        # Do not call self._connect() here — call start_connect() after
+        # registering the IRQ dispatcher
+    
+    def start_connect(self):
+        """Starts the connection to the macropad. Call after irq() in main.py."""
         self._connect()
-
+    
+    def handle_irq(self, event, data):
+        """Called by the shared IRQ dispatcher in main.py."""
+        self._irq(event, data)
+    
     def _connect(self):
         parts = _MAC.split(":")
         addr  = bytes(int(x, 16) for x in parts)
-        logger.info("KeypadBleHid: connessione a %s", _MAC)
+        logger.info("KeypadBleHid: connecting to %s", _MAC)
         self._phase = "connecting"
         self._ble.gap_connect(0, addr)
         self._notify_state("connecting")
@@ -172,12 +184,12 @@ class KeypadBleHid(KeypadBase):
                 self._phase = "discover_chars"
                 self._ble.gattc_discover_characteristics(self._conn, *hid[0])
             else:
-                logger.warning("KeypadBleHid: servizio HID non trovato")
+                logger.warning("KeypadBleHid: HID service not found")
 
         elif event == self._IRQ_GATTC_CHARACTERISTIC_RESULT:
             _, def_h, val_h, props, uuid = data
             u = ubluetooth.UUID(uuid)
-            if (u == _UUID_HID_REPORT or u == _UUID_BOOT_MOUSE) and (props & 0x10):
+            if (u == _UUID_HID_REPORT or u == _UUID_BOOT_MOUSE or u == _UUID_BOOT_KEYBOARD) and (props & 0x10):
                 self._report_handles.append((def_h, val_h))
 
         elif event == self._IRQ_GATTC_CHARACTERISTIC_DONE:
@@ -187,8 +199,8 @@ class KeypadBleHid(KeypadBase):
 
         elif event == self._IRQ_GATTC_DESCRIPTOR_RESULT:
             _, dsc_h, uuid = data
-            if ubluetooth.UUID(uuid) == _UUID_CCCD and self._current_char_idx > 0:
-                vh = self._report_handles[self._current_char_idx - 1][1]
+            if ubluetooth.UUID(uuid) == _UUID_CCCD:
+                vh = self._report_handles[self._current_char_idx][1]
                 self._cccd_queue.append((vh, dsc_h))
 
         elif event == self._IRQ_GATTC_DESCRIPTOR_DONE:
@@ -204,7 +216,7 @@ class KeypadBleHid(KeypadBase):
 
     def _discover_next_desc(self):
         if self._current_char_idx >= len(self._report_handles):
-            logger.info("KeypadBleHid: abilito %d notifiche", len(self._cccd_queue))
+            logger.info("KeypadBleHid: enabling %d notifications", len(self._cccd_queue))
             self._enable_next_cccd()
             return
         def_h, _ = self._report_handles[self._current_char_idx]
@@ -220,18 +232,27 @@ class KeypadBleHid(KeypadBase):
             self._ble.gattc_write(self._conn, dsc_h, _NOTIFY_ENABLE, 1)
         else:
             self._phase = "ready"
-            logger.info("KeypadBleHid: pronto")
+            logger.info("KeypadBleHid: ready")
             self._notify_state("ready")
 
     def _handle_notify(self, data):
-        # Report tastiera standard: 8 byte, [modifier, 0x00, key1..key6]
+        # Standard keyboard report: 8 bytes, [modifier, 0x00, key1..key6]
+        # Some HID devices include a report ID: 9 bytes, [report_id, modifier, 0x00, key1..key6]
         if len(data) >= 3 and data[1] == 0x00:
             modifier = data[0]
-            for kc in data[2:]:
-                if kc != 0:
-                    self._event_queue.append((kc, modifier))
-        # Altri report (boot mouse, knob proprietari): non utilizzati
-        # per ora, i knob mandano keycode standard già gestiti sopra.
+            key_bytes = data[2:]
+        elif len(data) >= 4 and data[2] == 0x00:
+            modifier = data[1]
+            key_bytes = data[3:]
+        else:
+            logger.debug("HID notify format unknown: %s", data)
+            return
+
+        for kc in key_bytes:
+            if kc != 0:
+                self._event_queue.append((kc, modifier))
+        # Other reports (boot mouse, proprietary knob data): not used
+        # for now; the knobs already send standard keycodes handled above.
 
     # -----------------------------------------------------------------------
     # KeypadBase interface

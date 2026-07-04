@@ -9,7 +9,7 @@ from drivers.display_abstract import DisplayBase
 
 
 class LCDDisplay(DisplayBase):
-    """Display LCD I2C con metodo standardizzato."""
+    """I2C LCD display with a standardized interface."""
 
     DEFAULT_I2C_ID = 0
     DEFAULT_I2C_ADDR = 0x27
@@ -26,16 +26,16 @@ class LCDDisplay(DisplayBase):
         rows: int = DEFAULT_ROWS,
     ):
         if I2cLcd is None:
-            raise ImportError("Il modulo i2c_lcd non è disponibile. Installare il driver LCD I2C")
+            raise ImportError("The i2c_lcd module is not available. Install the I2C LCD driver")
 
         self.cols = cols
         self.rows = rows
         self.i2c = I2C(i2c_id, scl=Pin(scl_pin), sda=Pin(sda_pin))
         self.lcd = I2cLcd(self.i2c, i2c_addr, rows, cols)
         
-        # --- AGGIUNTA DI SICUREZZA PER L'API DI BASE ---
-        # Iniettiamo i nomi mancanti direttamente nell'istanza creata
-        # in modo che lcd_api.py (riga 45) non si lamenti di 'num_columns'
+        # --- SAFETY ADDITION FOR THE BASE API ---
+        # Inject the missing names directly into the created instance
+        # so lcd_api.py (line 45) does not complain about 'num_columns'
         self.lcd.num_columns = cols
         self.lcd.num_lines = rows
         # -----------------------------------------------
@@ -47,7 +47,7 @@ class LCDDisplay(DisplayBase):
 
     def show_text(self, text: str, line: int = 0):
         if not (0 <= line < self.rows):
-            raise ValueError("line deve essere compreso tra 0 e rows-1")
+            raise ValueError("line must be between 0 and rows-1")
 
         self.lcd.move_to(0, line)
         padded = (text + " " * (self.cols - len(text)))[: self.cols]
@@ -67,3 +67,15 @@ class LCDDisplay(DisplayBase):
         self.show_text("Loading...", 0)
         if self.rows > 1:
             self.show_text("Please wait", 1)
+
+    def render(self, expr, cursor_pos, status="", result=None, is_menu=False,
+               menu_top="", menu_bottom=""):
+        if is_menu:
+            self.show_text(menu_top, 0)
+            self.show_text(menu_bottom, 1)
+        elif result is not None:
+            self.show_text("Result:", 0)
+            self.show_text(result[:self.cols], 1)
+        else:
+            self.show_text(expr[:self.cols], 0)
+            self.show_text(status[:self.cols], 1)

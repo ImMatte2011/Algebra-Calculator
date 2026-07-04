@@ -1,24 +1,24 @@
 """
-config.py — Configurazione hardware del firmware ESP32.
+config.py — Hardware configuration for the ESP32 firmware.
 
-Per cambiare variante hardware modificare solo questo file.
-Il resto del firmware (main.py, driver, ecc.) non va toccato.
+To change the hardware variant, edit only this file.
+The rest of the firmware (main.py, drivers, etc.) should not be touched.
 
-KEYPAD_TYPE:  "ble_hid"  → macropad BLE HID
-              "matrix"   → tastierino matriciale 4x4 via GPIO
-DISPLAY_TYPE: "oled"     → display OLED SSD1309/SSD1306/SH1106
-              "lcd"      → display LCD I2C 16x2
+KEYPAD_TYPE:  "ble_hid"  → BLE HID macropad
+              "matrix"   → 4x4 matrix keypad via GPIO
+DISPLAY_TYPE: "oled"     → OLED display SSD1309/SSD1306/SH1106
+              "lcd"      → 16x2 I2C LCD display
 """
 
 CONFIG = {
     # ------------------------------------------------------------------
-    # Hardware selezionato (cambia solo questi due per switchare variante)
+    # Selected hardware (change only these two to switch variants)
     # ------------------------------------------------------------------
     "KEYPAD_TYPE":  "ble_hid",  # "ble_hid" | "matrix"
     "DISPLAY_TYPE": "oled",     # "oled"    | "lcd"
 
     # ------------------------------------------------------------------
-    # BLE verso il telefono (peripheral — usato sempre)
+    # BLE toward the phone (peripheral — always used)
     # ------------------------------------------------------------------
     "BLE_NAME":            "CALC-ESP32",
     "BLE_SERVICE_UUID":    "22337400-2cf2-4bed-8172-a832e5ba8d1f",
@@ -26,44 +26,44 @@ CONFIG = {
     "BLE_RESULT_CHAR_UUID":"062251c8-1b65-47a2-83a4-4f50b781a158",
 
     # ------------------------------------------------------------------
-    # BLE HID macropad (central — usato solo con KEYPAD_TYPE="ble_hid")
+    # BLE HID macropad (central — used only with KEYPAD_TYPE="ble_hid")
     # ------------------------------------------------------------------
-    "BLE_KP_MAC": "E0:0F:7A:C3:C9:DF",   # MAC confermato da nRF Connect
-    "KEY_DEBOUNCE_MS": 0,                # gestito dal macropad stesso
+    "BLE_KP_MAC": "E0:0F:7A:C3:C9:DF",   # MAC confirmed by nRF Connect
+    "KEY_DEBOUNCE_MS": 0,                # handled by the macropad itself
 
     # ------------------------------------------------------------------
-    # Display OLED (usato con DISPLAY_TYPE="oled")
+    # OLED display (used with DISPLAY_TYPE="oled")
     # ------------------------------------------------------------------
     "OLED": {
-        # Interfaccia: "SPI" (SSD1309, default) o "I2C" (SSD1306)
+        # Interface: "SPI" (SSD1309, default) or "I2C" (SSD1306)
         "BUS": "SPI",
 
         # Controller: "SSD1309" | "SSD1306" | "SH1106"
-        # SSD1309 e SSD1306 usano gli stessi comandi.
-        # SH1106 ha un offset di colonna diverso (+2) nella routine di pagina.
+        # SSD1309 and SSD1306 use the same commands.
+        # SH1106 has a different column offset (+2) in the page routine.
         "CONTROLLER": "SSD1309",
 
         "WIDTH":  128,
         "HEIGHT": 64,
 
-        # Metodo di rendering su OLED
+        # OLED rendering method
         "USE_GLYPHS": True,
 
-        # Pin SPI (usati quando BUS="SPI")
+        # SPI pins (used when BUS="SPI")
         "SCK_PIN":  18,   # clock
         "MOSI_PIN": 23,   # data
         "DC_PIN":   21,   # data/command
         "CS_PIN":   5,    # chip select
         "RST_PIN":  22,   # reset (opzionale, -1 per disabilitare)
 
-        # Pin I2C (usati quando BUS="I2C")
+        # I2C pins (used when BUS="I2C")
         "SCL_PIN":  22,
         "SDA_PIN":  21,
-        "I2C_ADDR": 0x3C,  # tipico per SSD1306; 0x3D se JP1 aperto
+        "I2C_ADDR": 0x3C,  # typical for SSD1306; 0x3D if JP1 is open
     },
 
     # ------------------------------------------------------------------
-    # Display LCD I2C (usato con DISPLAY_TYPE="lcd")
+    # I2C LCD display (used with DISPLAY_TYPE="lcd")
     # ------------------------------------------------------------------
     "LCD": {
         "SCL_PIN":  22,
@@ -74,7 +74,7 @@ CONFIG = {
     },
 
     # ------------------------------------------------------------------
-    # Tastierino matriciale GPIO (usato con KEYPAD_TYPE="matrix")
+    # GPIO matrix keypad (used with KEYPAD_TYPE="matrix")
     # ------------------------------------------------------------------
     "KEYPAD": {
         "ROW_PINS": [32, 33, 18, 19],

@@ -1,29 +1,29 @@
 package com.myne.alg_calc.ble
 
 /**
- * Stato della connessione BLE verso l'ESP32, esposto alla UI tramite StateFlow.
- * Sostituisce la vecchia stringa di log non strutturata: ogni stato è tipizzato
- * e la UI può reagire (colori, badge, abilitazione pulsanti) senza fare parsing di testo.
+ * BLE connection state toward the ESP32, exposed to the UI via StateFlow.
+ * Replaces the old unstructured log string: each state is typed, and the UI can
+ * react (colors, badges, button enablement) without text parsing.
  */
 sealed class BleConnectionState {
-    /** Nessuna connessione attiva, nessun tentativo in corso. */
+    /** No active connection and no attempt in progress. */
     data object Disconnected : BleConnectionState()
 
-    /** Permessi runtime mancanti: la connessione non può nemmeno iniziare. */
+    /** Runtime permissions missing: the connection cannot start. */
     data class MissingPermissions(val missing: List<String>) : BleConnectionState()
 
-    /** Tentativo di connessione GATT in corso. */
+    /** GATT connection attempt in progress. */
     data object Connecting : BleConnectionState()
 
-    /** Connesso a livello GATT, in attesa della scoperta dei servizi/caratteristiche. */
+    /** Connected at the GATT level, waiting for service/characteristic discovery. */
     data object DiscoveringServices : BleConnectionState()
 
-    /** Tutto pronto: servizio trovato, notifiche abilitate, si possono inviare/ricevere dati. */
+    /** Ready: service found, notifications enabled, data can be sent/received. */
     data object Ready : BleConnectionState()
 
-    /** Disconnesso in modo inatteso, tentativo di riconnessione automatica in corso. */
+    /** Unexpectedly disconnected; automatic reconnect is in progress. */
     data class Reconnecting(val attempt: Int, val maxAttempts: Int) : BleConnectionState()
 
-    /** Errore non recuperabile automaticamente (serve intervento utente). */
+    /** Non-recoverable error (requires user intervention). */
     data class Error(val message: String) : BleConnectionState()
 }

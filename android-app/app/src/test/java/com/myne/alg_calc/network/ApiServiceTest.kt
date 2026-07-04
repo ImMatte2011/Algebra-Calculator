@@ -13,12 +13,12 @@ import org.junit.Test
 import retrofit2.HttpException
 
 /**
- * Unit test per ApiService usando MockWebServer.
+ * Unit test for ApiService using MockWebServer.
  *
- * MockWebServer fa partire un vero server HTTP locale in memoria:
- * le richieste vengono davvero fatte, ma verso localhost invece che
- * verso il Raspberry Pi reale. Così testiamo il client HTTP (header,
- * parsing della risposta, gestione errori) senza infrastruttura esterna.
+ * MockWebServer starts a real local HTTP server in memory:
+ * the requests are actually made, but to localhost instead of
+ * the real Raspberry Pi. This lets us test the HTTP client (headers,
+ * response parsing, error handling) without external infrastructure.
  */
 class ApiServiceTest {
 
@@ -40,11 +40,11 @@ class ApiServiceTest {
         ApiService.create(baseUrl = server.url("/").toString(), token = token)
 
     // -------------------------------------------------------------------------
-    // Token Bearer nell'header
+    // Bearer token in the Authorization header
     // -------------------------------------------------------------------------
 
     @Test
-    fun `token non vuoto viene aggiunto all header Authorization`() = runTest {
+    fun `non-empty token is added to Authorization header`() = runTest {
         server.enqueue(
             MockResponse()
                 .setBody("""{"result":"result:2","error":null}""")
@@ -59,7 +59,7 @@ class ApiServiceTest {
     }
 
     @Test
-    fun `token vuoto non aggiunge header Authorization`() = runTest {
+    fun `empty token does not add Authorization header`() = runTest {
         server.enqueue(
             MockResponse()
                 .setBody("""{"result":"result:2","error":null}""")
@@ -74,11 +74,11 @@ class ApiServiceTest {
     }
 
     // -------------------------------------------------------------------------
-    // Parsing delle risposte
+    // Response parsing
     // -------------------------------------------------------------------------
 
     @Test
-    fun `risposta 200 con result viene parsata correttamente`() = runTest {
+    fun `200 response with result is parsed correctly`() = runTest {
         server.enqueue(
             MockResponse()
                 .setBody("""{"ok":true,"result":"result: -1, 1","error":null}""")
@@ -93,10 +93,10 @@ class ApiServiceTest {
     }
 
     @Test
-    fun `risposta 200 con campo error viene parsata correttamente`() = runTest {
+    fun `200 response with error field is parsed correctly`() = runTest {
         server.enqueue(
             MockResponse()
-                .setBody("""{"ok":false,"result":null,"error":"Equazione incompleta"}""")
+                .setBody("""{"ok":false,"result":null,"error":"Incomplete equation"}""")
                 .setResponseCode(200)
         )
 
@@ -104,15 +104,15 @@ class ApiServiceTest {
             .solveExpression(MathRequest("x=", "equation"))
 
         assertNull(response.result)
-        assertEquals("Equazione incompleta", response.error)
+        assertEquals("Incomplete equation", response.error)
     }
 
     // -------------------------------------------------------------------------
-    // Gestione errori HTTP
+    // HTTP error handling
     // -------------------------------------------------------------------------
 
     @Test(expected = HttpException::class)
-    fun `risposta 401 lancia HttpException`() = runTest {
+    fun `401 response throws HttpException`() = runTest {
         server.enqueue(
             MockResponse()
                 .setBody("""{"detail":"Invalid or missing authorization token"}""")
@@ -124,7 +124,7 @@ class ApiServiceTest {
     }
 
     @Test(expected = HttpException::class)
-    fun `risposta 403 lancia HttpException`() = runTest {
+    fun `403 response throws HttpException`() = runTest {
         server.enqueue(
             MockResponse()
                 .setBody("""{"detail":"Service is inactive"}""")
@@ -136,7 +136,7 @@ class ApiServiceTest {
     }
 
     @Test(expected = HttpException::class)
-    fun `risposta 400 lancia HttpException`() = runTest {
+    fun `400 response throws HttpException`() = runTest {
         server.enqueue(
             MockResponse()
                 .setBody("""{"detail":"Unable to solve expression"}""")
@@ -147,11 +147,11 @@ class ApiServiceTest {
     }
 
     // -------------------------------------------------------------------------
-    // Body della richiesta
+    // Request body
     // -------------------------------------------------------------------------
 
     @Test
-    fun `body della richiesta contiene expression type e action`() = runTest {
+    fun `request body contains expression type and action`() = runTest {
         server.enqueue(
             MockResponse()
                 .setBody("""{"result":"result:2x","error":null}""")

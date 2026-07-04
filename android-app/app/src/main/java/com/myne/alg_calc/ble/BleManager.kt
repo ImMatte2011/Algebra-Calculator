@@ -19,15 +19,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 
 /**
- * Gestisce la connessione BLE verso l'ESP32.
+ * Manages the BLE connection to the ESP32.
  *
- * Rispetto alla versione precedente:
- *  - controlla i permessi runtime PRIMA di toccare le API Bluetooth (niente più crash silenziosi
- *    o @SuppressLint usato per nascondere il problema invece di risolverlo);
- *  - chiude correttamente il GATT (niente più leak quando l'Activity viene ricreata);
- *  - tenta la riconnessione automatica con backoff se la disconnessione non è richiesta dall'utente;
- *  - espone lo stato come StateFlow tipizzato (BleConnectionState) invece di una stringa di log;
- *  - i messaggi ricevuti vengono esposti come SharedFlow, leggibile da chiunque osservi (ViewModel).
+ * Compared to the previous version:
+ *  - checks runtime permissions BEFORE touching Bluetooth APIs (no more silent crashes
+ *    or @SuppressLint used to hide the issue instead of fixing it);
+ *  - properly closes GATT resources (no more leaks when the Activity is recreated);
+ *  - attempts automatic reconnection with backoff if the disconnection was not user-initiated;
+ *  - exposes state as a typed StateFlow (BleConnectionState) instead of a log string;
+ *  - received messages are exposed as a SharedFlow, readable by any observer (ViewModel).
  */
 class BleManager(private val context: Context) {
 
@@ -51,11 +51,11 @@ class BleManager(private val context: Context) {
     private val _incomingMessages = MutableSharedFlow<String>(extraBufferCapacity = 16)
     val incomingMessages: SharedFlow<String> = _incomingMessages.asSharedFlow()
 
-    /** Eventi "tecnici" utili per il log (es. write fallita), separati dai dati veri e propri. */
+    /** Technical events useful for logging (e.g. write failed), separated from actual data. */
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 32)
     val events: SharedFlow<String> = _events.asSharedFlow()
 
-    /** Permessi richiesti, diversi a seconda della versione Android. */
+    /** Required permissions, different depending on the Android version. */
     fun requiredPermissions(): Array<String> {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
@@ -73,11 +73,11 @@ class BleManager(private val context: Context) {
     fun hasAllPermissions(): Boolean = missingPermissions().isEmpty()
 
     /**
-     * Avvia la connessione verso il MAC indicato. Va richiamata solo dopo aver verificato
-     * (o richiesto) i permessi runtime: se mancano, lo stato passa a MissingPermissions
-     * senza toccare nessuna API Bluetooth.
+     * Starts the connection to the specified MAC address. Should be called only after
+     * runtime permissions have been verified (or requested): if missing, the state
+     * switches to MissingPermissions without touching any Bluetooth API.
      */
-    @SuppressLint("MissingPermission") // i permessi sono verificati esplicitamente subito sotto
+    @SuppressLint("MissingPermission") // permissions are explicitly checked immediately below
     fun connect(macAddress: String) {
         val missing = missingPermissions()
         if (missing.isNotEmpty()) {
@@ -97,26 +97,26 @@ class BleManager(private val context: Context) {
             val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
             val adapter = bluetoothManager?.adapter
             if (adapter == null || !adapter.isEnabled) {
-                _connectionState.value = BleConnectionState.Error("Bluetooth spento o non disponibile")
+                _connectionState.value = BleConnectionState.Error("Bluetooth is off or unavailable")
                 return
             }
             val device = adapter.getRemoteDevice(macAddress)
-            Log.d(tag, "Tentativo di connessione a: $macAddress")
+            Log.d(tag, "Attempting connection to: $macAddress")
             _connectionState.value = BleConnectionState.Connecting
             bluetoothGatt = device.connectGatt(context, false, gattCallback)
         } catch (e: IllegalArgumentException) {
-            _connectionState.value = BleConnectionState.Error("MAC address non valido: $macAddress")
+            _connectionState.value = BleConnectionState.Error("Invalid MAC address: $macAddress")
         }
     }
 
-    /** Disconnessione voluta dall'utente: nessun tentativo di riconnessione automatica. */
+    /** User-requested disconnect: no automatic reconnection attempt. */
     @SuppressLint("MissingPermission")
     fun disconnect() {
         userInitiatedDisconnect = true
         bluetoothGatt?.disconnect()
     }
 
-    /** Chiude definitivamente le risorse GATT. Da chiamare in onDestroy/onCleared. */
+    /** Permanently closes GATT resources. Call from onDestroy/onCleared. */
     @SuppressLint("MissingPermission")
     fun release() {
         userInitiatedDisconnect = true
@@ -131,12 +131,12 @@ class BleManager(private val context: Context) {
         if (userInitiatedDisconnect) return
         val mac = lastMacAddress ?: return
         if (reconnectAttempt >= maxReconnectAttempts) {
-            _connectionState.value = BleConnectionState.Error("Riconnessione fallita dopo $maxReconnectAttempts tentativi")
+            _connectionState.value = BleConnectionState.Error("Reconnection failed after $maxReconnectAttempts attempts")
             return
         }
         reconnectAttempt++
         _connectionState.value = BleConnectionState.Reconnecting(reconnectAttempt, maxReconnectAttempts)
-        // Backoff semplice: 2s, 4s, 6s, 8s, 10s
+        // Simple backoff: 2s, 4s, 6s, 8s, 10s
         val delayMs = 2000L * reconnectAttempt
         mainHandler.postDelayed({
             if (!userInitiatedDisconnect) {
@@ -153,19 +153,19 @@ class BleManager(private val context: Context) {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
-                    Log.d(tag, "Connesso! Avvio scoperta servizi.")
+                    Log.d(tag, "Connected! Starting service discovery.")
                     reconnectAttempt = 0
                     _connectionState.value = BleConnectionState.DiscoveringServices
                     gatt.discoverServices()
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    Log.d(tag, "Disconnesso (status=$status).")
+                    Log.d(tag, "Disconnected (status=$status).")
                     gatt.close()
                     bluetoothGatt = null
                     if (userInitiatedDisconnect) {
                         _connectionState.value = BleConnectionState.Disconnected
                     } else {
-                        _events.tryEmit("Connessione BLE persa inaspettatamente (status=$status)")
+                        _events.tryEmit("BLE connection unexpectedly lost (status=$status)")
                         scheduleReconnect()
                     }
                 }
@@ -175,26 +175,26 @@ class BleManager(private val context: Context) {
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                _connectionState.value = BleConnectionState.Error("Scoperta servizi fallita (status=$status)")
+                _connectionState.value = BleConnectionState.Error("Service discovery failed (status=$status)")
                 return
             }
-            // Piccolo delay per stabilità dello stack BLE su alcuni dispositivi Android
+            // Small delay for BLE stack stability on some Android devices
             mainHandler.postDelayed({
                 val service = gatt.getService(serviceUuid)
                 if (service == null) {
-                    _connectionState.value = BleConnectionState.Error("Servizio BLE non trovato sull'ESP32")
+                    _connectionState.value = BleConnectionState.Error("BLE service not found on ESP32")
                     return@postDelayed
                 }
                 val resultChar = service.getCharacteristic(resultCharUuid)
                 if (resultChar == null) {
-                    _connectionState.value = BleConnectionState.Error("Caratteristica risultato non trovata")
+                    _connectionState.value = BleConnectionState.Error("Result characteristic not found")
                     return@postDelayed
                 }
 
                 gatt.setCharacteristicNotification(resultChar, true)
                 val descriptor = resultChar.getDescriptor(clientCharacteristicConfig)
                 if (descriptor == null) {
-                    _connectionState.value = BleConnectionState.Error("Descrittore di notifica non trovato")
+                    _connectionState.value = BleConnectionState.Error("Notification descriptor not found")
                     return@postDelayed
                 }
 
@@ -211,22 +211,22 @@ class BleManager(private val context: Context) {
 
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                Log.d(tag, "Notifiche abilitate correttamente.")
+                Log.d(tag, "Notifications enabled successfully.")
                 _connectionState.value = BleConnectionState.Ready
             } else {
-                _connectionState.value = BleConnectionState.Error("Abilitazione notifiche fallita (status=$status)")
+                _connectionState.value = BleConnectionState.Error("Notification enable failed (status=$status)")
             }
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
             val data = String(value, Charsets.UTF_8)
-            Log.d(tag, "Dato ricevuto dal BLE: $data")
+            Log.d(tag, "Data received from BLE: $data")
             _incomingMessages.tryEmit(data)
         }
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                _events.tryEmit("Invio dato fallito (status=$status)")
+                _events.tryEmit("Data send failed (status=$status)")
             }
         }
     }
@@ -238,11 +238,11 @@ class BleManager(private val context: Context) {
         val char = service?.getCharacteristic(exprCharUuid)
 
         if (gatt == null || char == null || _connectionState.value != BleConnectionState.Ready) {
-            _events.tryEmit("Impossibile inviare \"$text\": connessione BLE non pronta")
+            _events.tryEmit("Unable to send \"$text\": BLE connection not ready")
             return
         }
 
-        Log.d(tag, "Invio al BLE: $text")
+        Log.d(tag, "Sending to BLE: $text")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             gatt.writeCharacteristic(char, text.toByteArray(), BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
         } else {

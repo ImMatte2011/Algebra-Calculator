@@ -1,5 +1,5 @@
 class TextScroller:
-    """Gestisce lo scorrimento non bloccante del testo su display limitati."""
+    """Manages non-blocking text scrolling on limited displays."""
 
     def __init__(self, width, rows=1):
         self.width = width
@@ -10,7 +10,7 @@ class TextScroller:
         self.max_start = 0
 
     def update(self, text, cursor_pos=None):
-        """Aggiorna lo stato con il testo corrente e calcola la finestra visibile."""
+        """Updates the state with the current text and computes the visible window."""
         self.text = text or ""
         self.cursor_pos = min(max(0, cursor_pos if cursor_pos is not None else len(self.text)), len(self.text))
         self.max_start = max(0, len(self.text) - self.width)
@@ -18,7 +18,7 @@ class TextScroller:
         return self.get_visible_text()
 
     def _recenter_window(self):
-        """Posiziona la finestra in modo che il cursore resti sulla destra se possibile."""
+        """Keeps the window positioned so the cursor stays on the right when possible."""
         if len(self.text) <= self.width:
             self.window_start = 0
             return
@@ -33,17 +33,17 @@ class TextScroller:
         self.window_start = target_start
 
     def scroll_left(self):
-        """Scorri la finestra verso l'inizio del testo."""
+        """Scrolls the window toward the start of the text."""
         self.window_start = max(0, self.window_start - 1)
         return self.get_visible_text()
 
     def scroll_right(self):
-        """Scorri la finestra verso la fine del testo."""
+        """Scrolls the window toward the end of the text."""
         self.window_start = min(self.max_start, self.window_start + 1)
         return self.get_visible_text()
 
     def get_visible_text(self):
-        """Restituisce il segmento di testo attualmente visibile."""
+        """Returns the text segment currently visible."""
         if len(self.text) <= self.width:
             return self.text + " " * (self.width - len(self.text))
 

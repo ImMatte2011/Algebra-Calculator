@@ -3,11 +3,11 @@ package com.myne.alg_calc.settings
 import android.content.Context
 
 /**
- * Impostazioni dell'app persistite in SharedPreferences e modificabili dalla UI.
+ * App settings persisted in SharedPreferences and editable from the UI.
  *
- * I default sono stringa vuota: la prima volta che l'app viene aperta l'utente
- * deve configurare MAC, URL e token dalla schermata impostazioni.
- * Nessun valore reale è hardcoded nel sorgente.
+ * Defaults are empty strings: when the app is first opened the user must
+ * configure MAC, URL, and token from the settings screen.
+ * No real value is hardcoded in source.
  */
 class AppSettings(context: Context) {
 
@@ -41,14 +41,14 @@ class AppSettings(context: Context) {
         }
 
     /**
-     * Token Bearer per il server FastAPI.
-     * Obbligatorio quando il backend gira con ACCESS_MODE=public.
-     * Se vuoto, l'header Authorization non viene aggiunto (compatibile con ACCESS_MODE=tailscale).
+     * Bearer token for the FastAPI server.
+     * Required when the backend runs with ACCESS_MODE=public.
+     * When empty, the Authorization header is not added (compatible with ACCESS_MODE=tailscale).
      */
     var apiToken: String
         get() = prefs.getString(KEY_API_TOKEN, "") ?: ""
         set(value) = prefs.edit().putString(KEY_API_TOKEN, value).apply()
 
-    /** True se le impostazioni minime per usare l'app sono state configurate. */
+    /** True if the minimal settings required to use the app are configured. */
     fun isConfigured(): Boolean = espMacAddress.isNotBlank() && rpiBaseUrl.isNotBlank()
 }

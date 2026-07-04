@@ -18,18 +18,18 @@ interface ApiService {
 
     companion object {
         /**
-         * Crea il client Retrofit verso il server FastAPI.
+         * Creates the Retrofit client for the FastAPI server.
          *
-         * @param baseUrl URL base del server (es. "http://100.89.229.75:8000/" via Tailscale
-         *                oppure "https://mio-dominio.duckdns.org/" via Caddy).
-         * @param token   Bearer token da inviare nell'header Authorization.
-         *                Obbligatorio quando il server gira con ACCESS_MODE=public.
-         *                Se vuoto, l'header non viene aggiunto (compatibile con ACCESS_MODE=tailscale).
+         * @param baseUrl Base URL of the server (e.g. "http://100.89.229.75:8000/" via Tailscale
+         *                or "https://my-domain.duckdns.org/" via Caddy).
+         * @param token   Bearer token to send in the Authorization header.
+         *                Required when the server runs with ACCESS_MODE=public.
+         *                When empty, the header is not added (compatible with ACCESS_MODE=tailscale).
          */
         fun create(baseUrl: String, token: String = ""): ApiService {
             val loggingInterceptor = HttpLoggingInterceptor().apply {
-                // BASIC: logga metodo/URL/status ma NON il corpo della risposta,
-                // così il token e i risultati non finiscono in chiaro nel Logcat.
+                // BASIC: logs method/URL/status but NOT response body,
+                // so the token and results do not appear in clear text in Logcat.
                 level = HttpLoggingInterceptor.Level.BASIC
             }
 

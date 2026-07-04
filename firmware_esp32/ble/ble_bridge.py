@@ -8,11 +8,19 @@ class BLEBridge:
     _IRQ_CENTRAL_DISCONNECT = 2
     _IRQ_GATTS_WRITE = 3
 
-    def __init__(self, callback_on_receive=None, advertise_interval=5, inactivity_timeout=10):
-        self.ble = ubluetooth.BLE()
-        self.ble.active(True)
-        self.ble.irq(self._irq)
-
+    def __init__(self, callback_on_receive=None, advertise_interval=5,
+                inactivity_timeout=10, ble_instance=None, register_irq=True):
+    
+        if ble_instance is not None:
+            self.ble = ble_instance
+            # Do not call active(True): already active
+        else:
+            self.ble = ubluetooth.BLE()
+            self.ble.active(True)
+    
+        if register_irq:
+            self.ble.irq(self._irq)
+    
         self.callback = callback_on_receive
         self.conn_handle = None
         self.last_activity = time.time()
@@ -22,18 +30,22 @@ class BLEBridge:
         self.inactivity_timeout = inactivity_timeout
         self.rx_queue = []
         self.needs_advertise = True
-
+    
         service_uuid = ubluetooth.UUID(CONFIG["BLE_SERVICE_UUID"])
-        expr_uuid = ubluetooth.UUID(CONFIG["BLE_EXPR_CHAR_UUID"])
-        result_uuid = ubluetooth.UUID(CONFIG["BLE_RESULT_CHAR_UUID"])
-
-        expr_char = (expr_uuid, ubluetooth.FLAG_WRITE | ubluetooth.FLAG_WRITE_NO_RESPONSE)
+        expr_uuid    = ubluetooth.UUID(CONFIG["BLE_EXPR_CHAR_UUID"])
+        result_uuid  = ubluetooth.UUID(CONFIG["BLE_RESULT_CHAR_UUID"])
+    
+        expr_char   = (expr_uuid,   ubluetooth.FLAG_WRITE | ubluetooth.FLAG_WRITE_NO_RESPONSE)
         result_char = (result_uuid, ubluetooth.FLAG_NOTIFY | ubluetooth.FLAG_READ)
         service = (service_uuid, (expr_char, result_char))
-
+    
         ((self.expr_handle, self.result_handle),) = self.ble.gatts_register_services((service,))
-        logger.info("BLE Bridge inizializzato")
-
+        logger.info("BLE Bridge initialized")
+    
+    def handle_irq(self, event, data):
+        """Called by the shared IRQ dispatcher in main.py (register_irq=False)."""
+        self._irq(event, data)
+ 
     def _advertise(self):
         name = CONFIG["BLE_NAME"]
         payload = b'\x02\x01\x06' + bytes([len(name) + 1]) + b'\x09' + name.encode()

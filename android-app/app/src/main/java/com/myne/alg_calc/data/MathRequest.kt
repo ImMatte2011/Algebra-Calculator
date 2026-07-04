@@ -3,8 +3,8 @@ package com.myne.alg_calc.data
 import com.google.gson.annotations.SerializedName
 
 /**
- * Questa classe mappa esattamente il modello Pydantic di FastAPI.
- * I campi verranno convertiti automaticamente in JSON dalla libreria Gson.
+ * This class maps exactly to the FastAPI Pydantic model.
+ * The fields are automatically converted to JSON by Gson.
  */
 data class MathRequest(
     @SerializedName("expression") val expression: String,
@@ -13,7 +13,7 @@ data class MathRequest(
 )
 
 /**
- * Questa classe serve a ricevere la risposta dal Raspberry Pi.
+ * This class models the response received from the Raspberry Pi.
  */
 data class MathResponse(
     @SerializedName("result") val result: String? = null,

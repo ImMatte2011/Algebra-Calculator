@@ -1,15 +1,15 @@
 """
-keypad_base.py — Interfaccia astratta per il tastierino.
+keypad_base.py — Abstract interface for the keypad.
 
-Definisce KeypadAction (i comandi logici riconosciuti dall'InputHandler)
-e KeypadBase (la classe astratta che ogni implementazione hardware deve
-estendere). Il codice in main.py e input_handler.py dipende SOLO da
-questi due, mai dai driver concreti.
+Defines KeypadAction (the logical commands recognized by InputHandler)
+and KeypadBase (the abstract base class that each hardware implementation must
+extend). The code in main.py and input_handler.py depends only on these two,
+never on the concrete drivers.
 """
 
 
 class KeypadAction:
-    """Comandi logici prodotti dal tastierino, indipendenti dall'hardware."""
+    """Logical commands produced by the keypad, independent of hardware."""
     ENTER     = "ENTER"
     BACKSPACE = "BACKSPACE"
     DELETE    = "DELETE"
@@ -19,7 +19,7 @@ class KeypadAction:
     UP        = "UP"
     DOWN      = "DOWN"
 
-    # Layer-based actions (F13-F18 su macropad BLE, o tasti dedicati su matrix)
+    # Layer-based actions (F13-F18 on BLE macropad, or dedicated keys on matrix keypad)
     ACTION_SIMPLIFY  = "CMD_SIMPLIFY"
     ACTION_EXPAND    = "CMD_EXPAND"
     ACTION_FACTOR    = "CMD_FACTOR"
@@ -27,10 +27,10 @@ class KeypadAction:
     TYPE_INEQUALITY  = "CMD_TYPE_INEQUALITY"
     TYPE_EXPRESSION  = "CMD_TYPE_EXPRESSION"
 
-    # Funzione radice — inserisce "sqrt(" nell'espressione
+    # Square-root action — inserts "sqrt(" into the expression
     SQRT = "CMD_SQRT"
 
-    # Solo per keypad matriciale (doppio SHIFT hardware)
+    # For matrix keypad only (hardware double SHIFT)
     SHIFT_A   = "CMD_SHIFT_A"
     SHIFT_B   = "CMD_SHIFT_B"
     SHIFT     = "SHIFT"
@@ -38,31 +38,31 @@ class KeypadAction:
 
 class KeypadBase:
     """
-    Interfaccia astratta per qualsiasi tipo di tastierino.
+    Abstract interface for any keypad type.
 
-    Le implementazioni concrete:
-      - keypad_matrix.py  → tastierino matriciale 4x4 via GPIO (machine.Pin)
-      - keypad_ble_hid.py → macropad BLE HID central (ubluetooth)
+    Concrete implementations:
+      - keypad_matrix.py  → 4x4 matrix keypad via GPIO (machine.Pin)
+      - keypad_ble_hid.py → BLE HID central macropad (ubluetooth)
 
-    Contratto:
-      update() viene chiamato ad ogni iterazione del loop principale e
-      restituisce un singolo valore: un carattere ('0'-'9', 'x', '+', ...),
-      un KeypadAction.*, oppure None se non c'è nulla di nuovo.
+    Contract:
+      update() is called on every iteration of the main loop and returns a single
+      value: a character ('0'-'9', 'x', '+', ...), a KeypadAction.*, or None if
+      there is nothing new.
     """
 
     def update(self):
         """
-        Legge lo stato del tastierino e restituisce il prossimo evento.
+        Reads the keypad state and returns the next event.
 
         Returns:
-            str | None — carattere, KeypadAction.*, oppure None
+            str | None — character, KeypadAction.*, or None
         """
-        raise NotImplementedError("update() deve essere implementato dalla sottoclasse")
+        raise NotImplementedError("update() must be implemented by the subclass")
 
     def reset_shift(self):
         """
-        Resetta lo stato di shift/layer software (se applicabile).
-        Chiamato da main.py dopo ogni invio al RPi.
-        Le implementazioni che non hanno shift software possono ignorarlo.
+        Resets the software shift/layer state (if applicable).
+        Called by main.py after every submission to the RPi.
+        Implementations without software shift can ignore it.
         """
         pass

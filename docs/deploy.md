@@ -70,8 +70,8 @@ necessari: la tailnet fa già da canale cifrato e autenticato.
 
 ## 4) Hardening
 
-- Bearer token richiesto in `ACCESS_MODE=public` (vedi sopra — collegato a
-  `/solve`, `/toggle`, `/status` in `backend_rpi4/main.py`).
+- Bearer token required in `ACCESS_MODE=public` (see above; it protects
+  `/solve` and `/status` in `backend_rpi4/main.py`).
 - Limita il rate sugli endpoint (middleware o API gateway) — SymPy su input
   arbitrari può essere un vettore di DoS.
 - Valida e sanitizza l'input su `/solve`.

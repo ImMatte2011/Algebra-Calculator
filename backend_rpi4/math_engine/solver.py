@@ -7,7 +7,7 @@ ops = {"gt": sympy.Gt, "lt": sympy.Lt, "ge": sympy.Ge, "le": sympy.Le}
 x = symbols("x")
 
 
-def risolvi(expr_info):
+def solve(expr_info):
     try:
         t = expr_info.get("type")
 
@@ -42,20 +42,20 @@ def risolvi(expr_info):
             else:
                 return {"error": f"Unsupported action: {act}"}
 
-            if expr_info.get("valore_x") is not None:
+            if expr_info.get("x_value") is not None:
                 try:
-                    val = expr_info["valore_x"]
+                    val = expr_info["x_value"]
                     result["evaluated"] = expr.subs(x, val).evalf()
                 except Exception:
-                    result["evaluated_error"] = "Could not evaluate with given valore_x"
+                    result["evaluated_error"] = "Could not evaluate with given x_value"
             return {"sol": result}
 
         elif t == "expression" and expr_info.get("action") is None:
             return {"error": "Action is required for expression type"}
-            # Non dovrebbe capitare mai perché il telefono fa da bridge
-            # e dovrebbe sempre inviare un action se "type"=="expression", 
-            # ma è meglio gestire anche questo caso se il programma su ESP32
-            # dovesse avere un bug o il telefono stesso dovesse inviare un messaggio malformato
+            # This should never happen because the phone bridge is expected
+            # to always send an action when "type" == "expression",
+            # but we handle it defensively in case the ESP32 firmware or the phone
+            # sends malformed data.
 
         return {"error": "Unknown expression type"}
     except Exception as e:

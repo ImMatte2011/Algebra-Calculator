@@ -4,7 +4,7 @@ L'app fa da ponte tra l'ESP32 (BLE) e il server FastAPI sul Raspberry Pi
 (HTTP/HTTPS): riceve l'espressione via BLE, la inoltra a `/solve`, e rimanda
 il risultato all'ESP32 via BLE per visualizzarlo sul display LCD.
 
-Vedi [phone_bridge.md](phone_bridge.md) per l'architettura generale e
+Vedi [network.md](network.md) per l'architettura generale e
 [server.md](server.md) per il contratto dell'API.
 
 ## Stack e architettura

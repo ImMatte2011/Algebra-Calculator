@@ -52,7 +52,7 @@ fun BridgeScreen(viewModel: MainViewModel = viewModel(factory = MainViewModel.Fa
     var showSettings by remember { mutableStateOf(false) }
     var autoConnectAttempted by remember { mutableStateOf(false) }
 
-    // Appena i permessi sono concessi, prova a connettersi una sola volta in automatico
+    // Once permissions are granted, attempt automatic connection only once
     LaunchedEffect(permissionsState.allPermissionsGranted) {
         if (permissionsState.allPermissionsGranted && !autoConnectAttempted) {
             autoConnectAttempted = true
@@ -87,7 +87,7 @@ fun BridgeScreen(viewModel: MainViewModel = viewModel(factory = MainViewModel.Fa
         )
         Spacer(modifier = Modifier.height(12.dp))
 
-        Text("Log eventi", style = MaterialTheme.typography.titleSmall)
+        Text("Event log", style = MaterialTheme.typography.titleSmall)
         Spacer(modifier = Modifier.height(4.dp))
         LogList(entries = uiState.logEntries, modifier = Modifier.weight(1f))
     }
@@ -111,18 +111,18 @@ private fun PermissionRequestCard(onRequestClick: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                "Permessi Bluetooth necessari",
+                "Bluetooth permissions required",
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "L'app non puo' connettersi all'ESP32 senza i permessi Bluetooth/Posizione richiesti dal sistema.",
+                "The app cannot connect to the ESP32 without the Bluetooth/location permissions requested by the system.",
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = onRequestClick) {
-                Text("Concedi permessi")
+                Text("Grant permissions")
             }
         }
     }
@@ -188,11 +188,11 @@ private fun ActionRow(
     ) {
         if (isConnectedOrConnecting) {
             OutlinedButton(onClick = onDisconnect, modifier = Modifier.weight(1f)) {
-                Text("Disconnetti")
+                Text("Disconnect")
             }
         } else {
             Button(onClick = onConnect, enabled = permissionsGranted, modifier = Modifier.weight(1f)) {
-                Text("Connetti BLE")
+                Text("Connect BLE")
             }
         }
         OutlinedButton(onClick = onTestRpi, modifier = Modifier.weight(1f)) {
@@ -202,7 +202,7 @@ private fun ActionRow(
     Spacer(modifier = Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         TextButton(onClick = onSettings, modifier = Modifier.weight(1f)) {
-            Text("Impostazioni")
+            Text("Settings")
         }
         TextButton(onClick = onClearLog, modifier = Modifier.weight(1f)) {
             Text("Pulisci log")
@@ -224,7 +224,7 @@ private fun LogList(entries: List<LogEntry>, modifier: Modifier = Modifier) {
     Card(modifier = modifier.fillMaxWidth()) {
         if (entries.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-                Text("Nessun evento ancora", style = MaterialTheme.typography.bodySmall)
+                Text("No events yet", style = MaterialTheme.typography.bodySmall)
             }
         } else {
             LazyColumn(state = listState, modifier = Modifier.padding(8.dp)) {
@@ -270,13 +270,13 @@ private fun SettingsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Impostazioni") },
+        title = { Text("Settings") },
         text = {
             Column {
                 OutlinedTextField(
                     value = mac,
                     onValueChange = { mac = it },
-                    label = { Text("MAC ESP32 (XX:XX:XX:XX:XX:XX)") },
+                    label = { Text("ESP32 MAC (XX:XX:XX:XX:XX:XX)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -284,7 +284,7 @@ private fun SettingsDialog(
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = { Text("URL Raspberry Pi (http://IP:PORTA/)") },
+                    label = { Text("Raspberry Pi URL (http://IP:PORT/)" ) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -297,25 +297,25 @@ private fun SettingsDialog(
         confirmButton = {
             TextButton(onClick = {
                 val ok = onSave(mac.trim(), url.trim())
-                if (ok) onDismiss() else error = "MAC o URL non validi: controlla il formato"
+                if (ok) onDismiss() else error = "Invalid MAC or URL: please check the format"
             }) {
-                Text("Salva")
+                Text("Save")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annulla") }
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
 }
 
 private fun bleStateLabel(state: BleConnectionState): String = when (state) {
-    is BleConnectionState.Disconnected -> "Disconnesso"
-    is BleConnectionState.MissingPermissions -> "Permessi mancanti"
-    is BleConnectionState.Connecting -> "Connessione..."
-    is BleConnectionState.DiscoveringServices -> "Scoperta servizi..."
-    is BleConnectionState.Ready -> "Connesso"
-    is BleConnectionState.Reconnecting -> "Riconnessione ${state.attempt}/${state.maxAttempts}"
-    is BleConnectionState.Error -> "Errore"
+    is BleConnectionState.Disconnected -> "Disconnected"
+    is BleConnectionState.MissingPermissions -> "Missing permissions"
+    is BleConnectionState.Connecting -> "Connecting..."
+    is BleConnectionState.DiscoveringServices -> "Discovering services..."
+    is BleConnectionState.Ready -> "Connected"
+    is BleConnectionState.Reconnecting -> "Reconnecting ${state.attempt}/${state.maxAttempts}"
+    is BleConnectionState.Error -> "Error"
 }
 
 @Composable
@@ -328,10 +328,10 @@ private fun bleStateColor(state: BleConnectionState): Color = when (state) {
 }
 
 private fun rpiStatusLabel(status: RpiStatus): String = when (status) {
-    RpiStatus.UNKNOWN -> "Sconosciuto"
-    RpiStatus.CHECKING -> "Verifica..."
-    RpiStatus.REACHABLE -> "Raggiungibile"
-    RpiStatus.UNREACHABLE -> "Non raggiungibile"
+    RpiStatus.UNKNOWN -> "Unknown"
+    RpiStatus.CHECKING -> "Checking..."
+    RpiStatus.REACHABLE -> "Reachable"
+    RpiStatus.UNREACHABLE -> "Unreachable"
 }
 
 @Composable

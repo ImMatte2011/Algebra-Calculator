@@ -1,248 +1,124 @@
-# Calcolatrice algebraica ESP32 + Raspberry Pi
+# Network Architecture
 
-## Obiettivo
-
-Comunicazione Internet tra ESP32 e Raspberry Pi:
-
-- lunga distanza
-- gratuita
-- senza Tailscale
-- abbastanza sicura
-- usando JSON
-
----
-
-# Architettura finale
+The ESP32 does not call the Raspberry Pi directly over WiFi. The fixed local
+link is:
 
 ```text
-ESP32
-   |
- HTTPS
-   |
-Caddy Server :443
-   |
-reverse proxy
-   |
-FastAPI (localhost:8000)
-   |
-SymPy / motore algebra
+ESP32 keypad/display
+        |
+        | BLE GATT
+        v
+Android app
+        |
+        | HTTP/HTTPS, depending on app settings and ACCESS_MODE
+        v
+Raspberry Pi 4 FastAPI backend
+        |
+        v
+SymPy math engine
 ```
 
----
+The Android app is the bridge. It receives the expression from the ESP32 over
+BLE, sends it to the backend `/solve` endpoint, then sends the result back to
+the ESP32 over BLE.
 
-# Componenti
+## Backend Access Modes
 
-## ESP32
+Backend exposure is selected in `.env` through `ACCESS_MODE`, which is read by
+`backend_rpi4/config.py`.
 
-Gestisce:
+| `ACCESS_MODE` | Android app URL | Token | Typical use |
+|---|---|---|---|
+| `public` | `https://your-domain.duckdns.org/` behind Caddy | Required | Access from the public internet |
+| `tailscale` | `http://100.x.x.x:8000/` inside the tailnet | Not checked by the app | Private tailnet access |
 
-- tastiera
-- display
-- input utente
-- invio richieste
-- ricezione risultati
+In both modes, the ESP32 still talks only to the Android phone over BLE.
 
-Tecnologie:
+## Public Mode
 
-- WiFi
-- HTTPS
-- JSON
+Use this mode when the phone must reach the Raspberry Pi from outside the
+local network without Tailscale.
 
----
+```text
+Android app
+   |
+ HTTPS + Authorization: Bearer <API_TOKEN>
+   |
+Caddy on :443
+   |
+reverse_proxy
+   |
+FastAPI on 127.0.0.1:8000
+```
 
-## Raspberry Pi
+Recommended setup:
 
-Gestisce:
+- expose only `443/tcp` to the internet;
+- keep FastAPI bound to `127.0.0.1:8000`;
+- use Caddy for automatic TLS certificates;
+- use DuckDNS or another dynamic DNS provider if the home IP changes;
+- set a strong `API_TOKEN`.
 
-- algebra simbolica
-- calcoli
-- API
+## Tailscale Mode
 
-Tecnologie:
+Use this mode when the phone and Raspberry Pi are in the same Tailscale
+tailnet.
 
-- FastAPI
-- Uvicorn
-- SymPy
+```text
+Android app
+   |
+ Tailscale-encrypted HTTP
+   |
+FastAPI on the Pi tailnet address
+```
 
----
+In this mode Caddy, public TLS, DuckDNS, and the bearer token are not required
+by the backend. The security perimeter is the tailnet itself.
 
-## Caddy Server
+## BLE Link
 
-Serve per:
+BLE is only the local ESP32 <-> Android link. It carries:
 
-- HTTPS automatico
-- certificati TLS
-- reverse proxy
-- sicurezza base
+- expression packets from ESP32 to Android;
+- result/error packets from Android to ESP32.
 
-Espone SOLO la porta 443.
+The ESP32 firmware may also use BLE as a central when `KEYPAD_TYPE="ble_hid"`
+to read a BLE HID macropad, but that is separate from the Android bridge link.
 
-FastAPI NON è esposto direttamente.
+## Backend API
 
----
-
-# Sicurezza
-
-## HTTPS/TLS
-
-Protegge da:
-
-- sniffing
-- intercettazione traffico
-- MITM (man-in-the-middle)
-- modifica pacchetti
-
----
-
-## Bearer Token
-
-Header HTTP:
+The Android app calls:
 
 ```http
-Authorization: Bearer TOKEN_RANDOM_LUNGO
+POST /solve
+Authorization: Bearer <API_TOKEN>
 ```
 
-Protegge da:
-
-- richieste non autorizzate
-- scanner casuali
-
----
-
-## FastAPI solo locale
-
-FastAPI ascolta SOLO:
-
-```text
-127.0.0.1:8000
-```
-
-NON:
-
-```text
-0.0.0.0:8000
-```
-
-Così Internet vede solo Caddy.
-
----
-
-## Firewall
-
-Aprire solo:
-
-```text
-443/tcp
-```
-
-Bloccare tutto il resto.
-
----
-
-# Esempio richiesta
-
-## ESP32 -> Raspberry
-
-POST `/solve`
+Example request:
 
 ```json
 {
-  "expr": "integrate(x^2)"
+  "expression": "x^2-1=0",
+  "type": "equation",
+  "action": null
 }
 ```
 
----
-
-## Risposta
+Example response:
 
 ```json
 {
   "ok": true,
-  "result": "x^3/3"
+  "result": "x = -1 or x = 1"
 }
 ```
 
----
+`GET /status` can be used as a health check.
 
-# Cosa evitare
+## What To Avoid
 
-NON usare:
-
-- HTTP senza TLS
-- socket raw
-- eval()
-- exec()
-- parser homemade pericolosi
-- token corti
-- porte aperte inutili
-
----
-
-# DNS dinamico
-
-Se l’IP di casa cambia:
-
-Usare DuckDNS.
-
-Esempio:
-
-```text
-mio-server.duckdns.org
-```
-
----
-
-# Librerie utili
-
-## ESP32
-
-- WiFiClientSecure
-- ArduinoJson
-
----
-
-## Raspberry Pi
-
-- FastAPI
-- Uvicorn
-- SymPy
-
----
-
-# Avvio FastAPI
-
-```bash
-uvicorn app:app --host 127.0.0.1 --port 8000
-```
-
----
-
-# Configurazione base Caddy
-
-Caddyfile:
-
-```text
-miodominio.duckdns.org {
-
-    reverse_proxy 127.0.0.1:8000
-
-}
-```
-
----
-
-# Sicurezza reale
-
-Questa architettura è:
-
-- molto migliore di una porta TCP aperta
-- molto migliore di HTTP semplice
-- abbastanza sicura per un progetto personale
-
-La sicurezza dipende soprattutto da:
-
-- qualità del codice
-- aggiornamenti sistema
-- gestione token
-- parser matematico
-- timeout richieste
+- documenting ESP32 -> WiFi -> Raspberry Pi as the active architecture;
+- exposing FastAPI directly to the public internet;
+- using public HTTP without TLS;
+- committing real tokens, IPs, domains, or WiFi credentials;
+- using short or reused bearer tokens in `public` mode.

@@ -25,7 +25,7 @@ import retrofit2.HttpException
 import java.io.IOException
 import java.net.SocketTimeoutException
 
-/** Stato "reachability" del Raspberry Pi, separato dallo stato BLE: sono due connessioni diverse. */
+/** Raspberry Pi reachability state, separate from BLE state: they are two different connections. */
 enum class RpiStatus { UNKNOWN, CHECKING, REACHABLE, UNREACHABLE }
 
 data class UiState(
@@ -72,12 +72,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun buildApiService(): ApiService {
-        // Se l'URL è vuoto o non valido, usiamo un placeholder per evitare il crash di Retrofit.
-        // L'app non farà comunque chiamate finché l'utente non inserisce un URL vero.
+        // If the URL is empty or invalid, use a placeholder to avoid Retrofit crashing.
+        // The app will not actually make calls until the user enters a real URL.
         val url = if (AppSettings.isValidBaseUrl(settings.rpiBaseUrl)) {
             settings.rpiBaseUrl
         } else {
-            "http://localhost/" // URL di sicurezza per evitare il crash
+            "http://localhost/" // safe fallback URL to avoid a crash
         }
 
         return ApiService.create(baseUrl = url, token = settings.apiToken)
@@ -86,12 +86,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun requiredBlePermissions(): Array<String> = bleManager.requiredPermissions()
 
     fun connectBle() {
-        addLog(LogType.INFO, "Connessione a ${settings.espMacAddress}...")
+        addLog(LogType.INFO, "Connecting to ${settings.espMacAddress}...")
         bleManager.connect(settings.espMacAddress)
     }
 
     fun disconnectBle() {
-        addLog(LogType.INFO, "Disconnessione richiesta dall'utente")
+        addLog(LogType.INFO, "User requested disconnect")
         bleManager.disconnect()
     }
 
@@ -102,7 +102,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             espMacAddress = mac,
             isConfigured = settings.isConfigured()
         )
-        addLog(LogType.INFO, "MAC ESP32 aggiornato: $mac")
+        addLog(LogType.INFO, "ESP32 MAC updated: $mac")
         return true
     }
 
@@ -115,89 +115,89 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             rpiStatus = RpiStatus.UNKNOWN,
             isConfigured = settings.isConfigured()
         )
-        addLog(LogType.INFO, "URL Raspberry Pi aggiornato: ${settings.rpiBaseUrl}")
+        addLog(LogType.INFO, "Raspberry Pi URL updated: ${settings.rpiBaseUrl}")
         return true
     }
 
     fun updateApiToken(token: String) {
         settings.apiToken = token
         apiService = buildApiService()
-        addLog(LogType.INFO, "Token API aggiornato")
+        addLog(LogType.INFO, "API token updated")
     }
 
-    /** Verifica manuale di raggiungibilità del RPi, richiamabile da un pulsante in UI. */
+    /** Manual check of RPi reachability, callable from a UI button. */
     fun testRpiConnection() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(rpiStatus = RpiStatus.CHECKING)
             try {
                 apiService.solveExpression(MathRequest(expression = "1+1", type = "equation"))
                 _uiState.value = _uiState.value.copy(rpiStatus = RpiStatus.REACHABLE)
-                addLog(LogType.INFO, "Raspberry Pi raggiungibile")
+                addLog(LogType.INFO, "Raspberry Pi reachable")
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(rpiStatus = RpiStatus.UNREACHABLE)
-                addLog(LogType.ERROR, "Raspberry Pi non raggiungibile: ${describeNetworkError(e)}")
+                addLog(LogType.ERROR, "Raspberry Pi unreachable: ${describeNetworkError(e)}")
             }
         }
     }
 
     private fun handleIncomingBlePacket(raw: String) {
-        addLog(LogType.BLE_IN, "Ricevuto da ESP32: $raw")
+        addLog(LogType.BLE_IN, "Received from ESP32: $raw")
 
         val parsed = try {
             BlePacketParser.parse(raw)
         } catch (e: BlePacketParseException) {
-            addLog(LogType.ERROR, "Pacchetto non interpretabile: ${e.message}")
+            addLog(LogType.ERROR, "Unparseable packet: ${e.message}")
             bleManager.sendData("err:BadFormat")
             return
         }
 
-        addLog(LogType.INFO, "Espressione: \"${parsed.expression}\" (tipo: ${parsed.type}${parsed.action?.let { ", azione: $it" } ?: ""})")
+        addLog(LogType.INFO, "Expression: \"${parsed.expression}\" (type: ${parsed.type}${parsed.action?.let { ", action: $it" } ?: ""})")
 
         viewModelScope.launch {
             try {
-                addLog(LogType.NET_OUT, "Invio a RPi: ${parsed.expression}")
+                addLog(LogType.NET_OUT, "Sending to RPi: ${parsed.expression}")
                 val response = apiService.solveExpression(
                     MathRequest(expression = parsed.expression, type = parsed.type, action = parsed.action)
                 )
                 _uiState.value = _uiState.value.copy(rpiStatus = RpiStatus.REACHABLE)
 
                 if (response.error != null) {
-                    addLog(LogType.ERROR, "RPi ha risposto con errore: ${response.error}")
+                    addLog(LogType.ERROR, "RPi responded with error: ${response.error}")
                     bleManager.sendData("err:${response.error}")
                 } else {
                     val result = response.result ?: ""
-                    addLog(LogType.NET_IN, "Risposta RPi: $result")
+                    addLog(LogType.NET_IN, "RPi response: $result")
                     val resPacket = "res:$result"
-                    addLog(LogType.BLE_OUT, "Invio a ESP32: $resPacket")
+                    addLog(LogType.BLE_OUT, "Send to ESP32: $resPacket")
                     bleManager.sendData(resPacket)
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(rpiStatus = RpiStatus.UNREACHABLE)
                 val description = describeNetworkError(e)
-                addLog(LogType.ERROR, "Errore di rete: $description")
+                addLog(LogType.ERROR, "Network error: $description")
                 bleManager.sendData("err:RPiOff")
             }
         }
     }
 
     private fun describeNetworkError(e: Exception): String = when (e) {
-        is SocketTimeoutException -> "timeout, il RPi non ha risposto in tempo"
-        is HttpException -> "il server ha risposto con HTTP ${e.code()}"
-        is IOException -> "RPi irraggiungibile (rete/Tailscale non attivo?)"
+        is SocketTimeoutException -> "timeout: the RPi did not respond in time"
+        is HttpException -> "server responded with HTTP ${e.code()}"
+        is IOException -> "RPi unreachable (network/Tailscale may be down?)"
         else -> e.message ?: e.toString()
     }
 
     private fun logForBleState(state: BleConnectionState) {
         when (state) {
-            is BleConnectionState.Disconnected -> addLog(LogType.INFO, "BLE disconnesso")
+            is BleConnectionState.Disconnected -> addLog(LogType.INFO, "BLE disconnected")
             is BleConnectionState.MissingPermissions ->
-                addLog(LogType.ERROR, "Permessi mancanti: ${state.missing.joinToString()}")
-            is BleConnectionState.Connecting -> addLog(LogType.INFO, "Connessione BLE in corso...")
-            is BleConnectionState.DiscoveringServices -> addLog(LogType.INFO, "Scoperta servizi BLE...")
-            is BleConnectionState.Ready -> addLog(LogType.INFO, "BLE pronto")
+                addLog(LogType.ERROR, "Missing permissions: ${state.missing.joinToString()}")
+            is BleConnectionState.Connecting -> addLog(LogType.INFO, "BLE connection in progress...")
+            is BleConnectionState.DiscoveringServices -> addLog(LogType.INFO, "Discovering BLE services...")
+            is BleConnectionState.Ready -> addLog(LogType.INFO, "BLE ready")
             is BleConnectionState.Reconnecting ->
-                addLog(LogType.INFO, "Riconnessione in corso (tentativo ${state.attempt}/${state.maxAttempts})")
-            is BleConnectionState.Error -> addLog(LogType.ERROR, "Errore BLE: ${state.message}")
+                addLog(LogType.INFO, "Reconnecting (attempt ${state.attempt}/${state.maxAttempts})")
+            is BleConnectionState.Error -> addLog(LogType.ERROR, "BLE error: ${state.message}")
         }
     }
 

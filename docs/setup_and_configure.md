@@ -42,7 +42,7 @@ Dettagli completi: [server.md](server.md).
    `Authorization: Bearer <token>` (solo se `ACCESS_MODE=public`).
 3. Restituire il risultato all'ESP32.
 
-Dettagli: [phone_bridge.md](phone_bridge.md).
+Details: [network.md](network.md).
 
 ## Docker
 

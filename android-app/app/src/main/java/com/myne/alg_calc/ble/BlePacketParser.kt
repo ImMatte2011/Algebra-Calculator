@@ -1,26 +1,25 @@
 package com.myne.alg_calc.ble
 
 /**
- * Risultato del parsing di un pacchetto ricevuto dall'ESP32.
+ * Parses a packet received from the ESP32.
  *
- * L'ESP32 (MicroPython) invia `str(result)` dove `result` è una TUPLA PYTHON, es:
+ * The ESP32 (MicroPython) sends `str(result)` where `result` is a PYTHON TUPLE, e.g:
  *   ('2*x+5=9', 'equation')
  *   ("sin(x)+1=0", 'equation')
- *   ('x>3', 'disequation', 'simplify')
+ *   ('x>3', 'inequality', 'simplify')
  *
- * IMPORTANTE: non si può fare replace("(", "").replace(")", "").split(",") perché:
- *  - l'espressione algebrica può contenere parentesi legittime (sin(x), (x+1)/2, ecc.)
- *    che NON vanno rimosse, solo quelle "di contorno" della tupla;
- *  - se l'espressione contenesse una virgola o un apice, Python la scriverebbe
- *    correttamente tra virgolette (eventualmente doppie, se contiene un apice singolo),
- *    e split(",") la spezzerebbe nel punto sbagliato.
+ * IMPORTANT: you cannot do replace("(", "").replace(")", "").split(",") because:
+ *  - the algebraic expression may contain valid parentheses (sin(x), (x+1)/2, etc.)
+ *    that must NOT be removed, only the tuple's enclosing parentheses;
+ *  - if the expression contains a comma or a quote, Python will put it inside quotes
+ *    (possibly double quotes if it contains a single quote), and split(",") would break it incorrectly.
  *
- * Questo parser rispetta il "contesto tra apici": ignora virgole e parentesi che si
- * trovano dentro una stringa quotata, esattamente come farebbe un parser di letterali Python.
+ * This parser respects quoted string context: it ignores commas and parentheses inside
+ * quoted strings, just like a Python literal parser.
  */
 data class ParsedBlePacket(
     val expression: String,
-    /** Normalizzato per l'API del RPi: "equation" oppure "inequality". */
+    /** Normalized for the RPi API: "equation" or "inequality". */
     val type: String,
     val action: String? = null
 )
@@ -32,7 +31,7 @@ object BlePacketParser {
     fun parse(raw: String): ParsedBlePacket {
         val trimmed = raw.trim()
         if (trimmed.isEmpty()) {
-            throw BlePacketParseException("Pacchetto BLE vuoto")
+            throw BlePacketParseException("Empty BLE packet")
         }
 
         val inner = stripOuterParens(trimmed)
@@ -40,7 +39,7 @@ object BlePacketParser {
 
         if (tokens.size < 2) {
             throw BlePacketParseException(
-                "Pacchetto malformato: attesi almeno 2 campi (espressione, tipo), trovati ${tokens.size}. Raw: \"$raw\""
+                "Malformed packet: expected at least 2 fields (expression, type), found ${tokens.size}. Raw: \"$raw\""
             )
         }
 
@@ -49,14 +48,13 @@ object BlePacketParser {
         val action = tokens.getOrNull(2)?.let { unquote(it) }?.takeIf { it.isNotBlank() }
 
         if (expression.isBlank()) {
-            throw BlePacketParseException("Espressione vuota dopo il parsing. Raw: \"$raw\"")
+            throw BlePacketParseException("Empty expression after parsing. Raw: \"$raw\"")
         }
 
         val type = when {
-            rawType.contains("disequation", ignoreCase = true) -> "inequality"
-            rawType.contains("inequality", ignoreCase = true) -> "inequality"
+            rawType.contains("inequality", ignoreCase = true) || rawType.contains("disequation", ignoreCase = true) -> "inequality"
             rawType.contains("equation", ignoreCase = true) -> "equation"
-            else -> throw BlePacketParseException("Tipo non riconosciuto: \"$rawType\". Raw: \"$raw\"")
+            else -> throw BlePacketParseException("Unknown type: \"$rawType\". Raw: \"$raw\"")
         }
 
         return ParsedBlePacket(expression = expression, type = type, action = action)
@@ -66,12 +64,12 @@ object BlePacketParser {
         return if (s.startsWith("(") && s.endsWith(")")) {
             s.substring(1, s.length - 1)
         } else {
-            // Tollerante: se mai il firmware mandasse il pacchetto senza parentesi esterne
+            // Lenient fallback: if firmware ever sends the packet without outer parens
             s
         }
     }
 
-    /** Divide su virgole "di primo livello", ignorando quelle dentro apici singoli/doppi. */
+    /** Splits on top-level commas, ignoring commas inside single/double quotes. */
     private fun splitTopLevel(s: String): List<String> {
         val tokens = mutableListOf<String>()
         val current = StringBuilder()
@@ -81,7 +79,7 @@ object BlePacketParser {
             val c = s[i]
             when {
                 quoteChar != null && c == '\\' && i + 1 < s.length -> {
-                    // Carattere "escaped" dentro la stringa: copialo cosi' com'e' e salta avanti
+                    // Escaped character inside the string: copy it as-is and skip ahead
                     current.append(c).append(s[i + 1])
                     i++
                 }
@@ -107,7 +105,7 @@ object BlePacketParser {
         return tokens
     }
 
-    /** Rimuove gli apici esterni (singoli o doppi) e gestisce gli escape semplici. */
+    /** Removes outer single/double quotes and handles simple escapes. */
     private fun unquote(token: String): String {
         val t = token.trim()
         if (t.length >= 2) {

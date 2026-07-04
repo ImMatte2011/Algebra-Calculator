@@ -5,17 +5,17 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Sostituisce la vecchia stringa "debugLog" che cresceva all'infinito.
- * Ogni evento del bridge (ricezione BLE, invio RPi, risposta, errore...) diventa
- * una voce tipizzata, mostrabile con icona/colore diversi e con timestamp.
+ * Replaces the old "debugLog" string that used to grow without bounds.
+ * Each bridge event (BLE receive, RPi send, response, error, etc.) becomes
+ * a typed entry that can be displayed with different icon/color and timestamp.
  */
 enum class LogType {
-    INFO,       // eventi generici (connessione, stato)
-    BLE_IN,     // dato ricevuto dall'ESP32
-    BLE_OUT,    // dato inviato all'ESP32
-    NET_OUT,    // richiesta inviata al RPi
-    NET_IN,     // risposta ricevuta dal RPi
-    ERROR       // qualsiasi errore
+    INFO,       // generic events (connection, state)
+    BLE_IN,     // data received from the ESP32
+    BLE_OUT,    // data sent to the ESP32
+    NET_OUT,    // request sent to the RPi
+    NET_IN,     // response received from the RPi
+    ERROR       // any error
 }
 
 data class LogEntry(
