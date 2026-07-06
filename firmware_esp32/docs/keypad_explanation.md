@@ -1,4 +1,4 @@
-# 🧮 Dual SHIFT System — ESP32 Algebraic Calculator
+# 🧮 Dual SHIFT System — ESP32 Algebra Calculator
 
 The 4x4 matrix keypad has been enhanced by introducing **two distinct SHIFT modes** (State A and State B). This allows up to 3 different functions to be mapped to a single physical key, solving the lack of keys for parentheses, unknowns and advanced operators.
 

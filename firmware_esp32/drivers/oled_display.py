@@ -230,7 +230,7 @@ class OledDisplay(DisplayBase):
 
     def show_loading(self):
         self._fb.fill(0)
-        self._fb.text("Calc Algebraica", 0, 0, 1)
+        self._fb.text("Algebra Calculator", 0, 0, 1)
         self._fb.text("Loading...", 0, 16, 1)
         self.show()
 

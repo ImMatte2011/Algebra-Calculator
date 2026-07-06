@@ -1,4 +1,4 @@
-# FastAPI Server — Calc Algebraica (backend_rpi4)
+# FastAPI Server — Algebra Calculator (backend_rpi4)
 
 FastAPI server that receives an expression/equation/inequality and returns the result computed with SymPy. Designed to run on Raspberry Pi 4 behind an HTTPS reverse proxy (see [deploy.md](deploy.md) and [network.md](network.md)).
 

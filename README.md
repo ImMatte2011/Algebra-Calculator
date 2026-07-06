@@ -1,4 +1,4 @@
-# Calc Algebraica - ESP32 + Android + Raspberry Pi
+# Algebra Calculator - ESP32 + Android + Raspberry Pi
 
 Personal algebra calculator with keypad/display input on ESP32, an Android BLE
 bridge, and a Raspberry Pi 4 FastAPI backend powered by SymPy.

@@ -1,5 +1,5 @@
 """
-main.py — Entry point for the ESP32 firmware (Calc Algebraica).
+main.py — Entry point for the ESP32 firmware (Algebra Calculator).
 
 Initializes the display, keypad, and BLE based on CONFIG["DISPLAY_TYPE"] and
 CONFIG["KEYPAD_TYPE"]: no hardware-specific code here, only orchestration logic.

@@ -7,7 +7,7 @@ from math_engine.engine import solve_expression
 from utils.logger import info
 from utils.validators import verify_bearer_token
 
-app = FastAPI(title="Calc Algebraica API")
+app = FastAPI(title="Algebra Calculator API")
 
 
 class SolveRequest(BaseModel):
@@ -27,12 +27,12 @@ class HealthResponse(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
-    info("Starting Calc Algebraica API")
+    info("Starting Algebra Calculator API")
 
 
 @app.on_event("shutdown")
 def shutdown_event():
-    info("Stopping Calc Algebraica API")
+    info("Stopping Algebra Calculator API")
 
 
 @app.post("/solve", response_model=SolveResponse)

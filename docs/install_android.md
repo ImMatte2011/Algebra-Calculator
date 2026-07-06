@@ -70,7 +70,7 @@ The app has no preset values (see [android_app.md](android_app.md) — no MAC or
 ## 6. Grant Bluetooth Permissions
 
 On the first connection attempt, Android will ask for BLE permissions:
-- Android 12+: "Allow Calc Algebraica to find nearby devices?" → allow
+- Android 12+: "Allow Algebra Calculator to find nearby devices?" → allow
 - Android < 12: will ask for location permission (required by the system for BLE scanning on older versions, even though the app does not use location — see [android_app.md](android_app.md#bluetooth-permissions))
 
 ## 7. Generate a Shareable APK (Optional)
