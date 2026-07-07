@@ -153,10 +153,12 @@ class BleManager(private val context: Context) {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
-                    Log.d(tag, "Connected! Starting service discovery.")
+                    Log.d(tag, "Connected! Requesting MTU before service discovery.")
                     reconnectAttempt = 0
                     _connectionState.value = BleConnectionState.DiscoveringServices
-                    gatt.discoverServices()
+                    // Richiedi MTU prima di discoverServices; onMtuChanged avvierà la discovery.
+                    // 512 è il massimo spec BLE; il dispositivo negozierà al valore effettivo.
+                    gatt.requestMtu(512)
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.d(tag, "Disconnected (status=$status).")
@@ -173,12 +175,23 @@ class BleManager(private val context: Context) {
         }
 
         @SuppressLint("MissingPermission")
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Log.d(tag, "MTU negotiated: $mtu bytes (payload: ${mtu - 3} bytes)")
+            } else {
+                Log.w(tag, "MTU negotiation failed (status=$status), proceeding with default MTU.")
+            }
+            // Avvia la discovery in ogni caso: anche se la negoziazione fallisce,
+            // il default (23 byte) potrebbe bastare oppure l'ESP32 potrebbe accettarlo.
+            gatt.discoverServices()
+        }
+
+        @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 _connectionState.value = BleConnectionState.Error("Service discovery failed (status=$status)")
                 return
             }
-            // Small delay for BLE stack stability on some Android devices
             mainHandler.postDelayed({
                 val service = gatt.getService(serviceUuid)
                 if (service == null) {
@@ -218,10 +231,21 @@ class BleManager(private val context: Context) {
             }
         }
 
+        // Called on Android 13+ (API 33+)
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
             val data = String(value, Charsets.UTF_8)
             Log.d(tag, "Data received from BLE: $data")
             _incomingMessages.tryEmit(data)
+        }
+
+        // Called on Android < 13 (API < 33)
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                val data = String(characteristic.value ?: return, Charsets.UTF_8)
+                Log.d(tag, "Data received from BLE (legacy): $data")
+                _incomingMessages.tryEmit(data)
+            }
         }
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {

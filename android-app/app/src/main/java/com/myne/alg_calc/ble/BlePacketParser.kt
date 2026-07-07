@@ -45,7 +45,8 @@ object BlePacketParser {
 
         val expression = unquote(tokens[0])
         val rawType = unquote(tokens[1])
-        val action = tokens.getOrNull(2)?.let { unquote(it) }?.takeIf { it.isNotBlank() }
+        // Python serializes None as the literal string "None"; treat it as null.
+        val action = tokens.getOrNull(2)?.let { unquote(it) }?.takeIf { it.isNotBlank() && !it.equals("None", ignoreCase = false) }
 
         if (expression.isBlank()) {
             throw BlePacketParseException("Empty expression after parsing. Raw: \"$raw\"")

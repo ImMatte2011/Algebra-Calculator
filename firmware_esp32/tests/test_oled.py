@@ -105,7 +105,7 @@ try:
     for i in range(n_rows):
         display.show_text(f"Row {i}: ABCDEF12", line=i)
     check(f"text on {n_rows} rows without crashing", True)
-    print(f"  VISUAL: text on {n_rows} rows (Row 0 … Row {n_rows-1})")
+    print(f"  VISUAL: text on {n_rows} rows (Row 0 to Row {n_rows-1})")
     time.sleep_ms(2000)
 except Exception as e:
     check("text on every row without crashing", False, str(e))
@@ -120,7 +120,7 @@ if use_glyphs:
 
         display._fb.fill(0)
         display.show_text_glyphs("sqrt(<= >= !=", line=0)
-        print("  VISUAL: row 0 → glyph √ then ≤ then space then ≥ then space then ≠")
+        print("  VISUAL: row 0 -> glyph 'sqrt()' then '<=' then space then '>=' then space then '!='")
         time.sleep_ms(2000)
 
         display._fb.fill(0)
@@ -128,7 +128,7 @@ if use_glyphs:
         display.show_text_glyphs("y>=0", line=1)
         display.show_text_glyphs("a!=b", line=2)
         display.show_text_glyphs("sqrt(x^2)", line=3)
-        print("  VISUAL: x≤5 | y≥0 | a≠b | √(x^2)")
+        print("  VISUAL: x<=5 | y>=0 | a!=b | sqrt(x^2)")
         time.sleep_ms(2500)
         check("glyph rendering without crashing", True)
     except Exception as e:

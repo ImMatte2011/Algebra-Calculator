@@ -81,6 +81,9 @@ while not bridge.is_connected():
 
 check(f"phone connected within {CONN_TIMEOUT_S}s", True)
 
+print("  Attesa di 3s per permettere ad Android di abilitare le notifiche...")
+time.sleep_ms(3000)
+
 # Send test packet
 print(f"\n  Sending packet: {TEST_PACKET}")
 try:
@@ -101,8 +104,8 @@ while _received[0] is None:
 
 if _received[0] is not None:
     check("reply received from the phone", True)
-    check("reply starts with 'result:' or 'error:'",
-          _received[0].startswith("result:") or _received[0].startswith("error:"),
+    check("reply starts with 'res:' or 'err:'",
+          _received[0].startswith("res:") or _received[0].startswith("err:"),
           f"got: {repr(_received[0][:40])}")
 else:
     check("reply received within timeout",

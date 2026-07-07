@@ -7,6 +7,7 @@ class BLEBridge:
     _IRQ_CENTRAL_CONNECT = 1
     _IRQ_CENTRAL_DISCONNECT = 2
     _IRQ_GATTS_WRITE = 3
+    _IRQ_MTU_EXCHANGED = 21
 
     def __init__(self, callback_on_receive=None, advertise_interval=5,
                 inactivity_timeout=10, ble_instance=None, register_irq=True):
@@ -112,6 +113,10 @@ class BLEBridge:
                         self.rx_queue.append(payload)
                 except Exception as e:
                     logger.warning("BLE read error in IRQ: %s", e)
+        
+        elif event == self._IRQ_MTU_EXCHANGED:
+            conn_handle, mtu = data
+            print(f"[INFO] BLE MTU negoziato con Android: {mtu} byte")
 
     def check_connection(self):
         return self.is_connected()
