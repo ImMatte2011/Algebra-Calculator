@@ -18,12 +18,20 @@ CONFIG = {
     "DISPLAY_TYPE": "oled",     # "oled"    | "lcd"
 
     # ------------------------------------------------------------------
+    # Watchdog timer (enabled by default, can be disabled for debugging)
+    # ------------------------------------------------------------------
+    "ENABLE_WATCHDOG":     False,
+    "WATCHDOG_TIMEOUT_MS": 60000,
+
+    # ------------------------------------------------------------------
     # BLE toward the phone (peripheral — always used)
     # ------------------------------------------------------------------
     "BLE_NAME":            "CALC-ESP32",
     "BLE_SERVICE_UUID":    "22337400-2cf2-4bed-8172-a832e5ba8d1f",
     "BLE_EXPR_CHAR_UUID":  "6ee3cd41-4e4c-4bdb-809e-d45007604f4a",
     "BLE_RESULT_CHAR_UUID":"062251c8-1b65-47a2-83a4-4f50b781a158",
+    "PHONE_MAC":           "XX:XX:XX:XX:XX:XX",
+    "BLE_PHONE_TIMEOUT_S": 30,
 
     # ------------------------------------------------------------------
     # BLE HID macropad (central — used only with KEYPAD_TYPE="ble_hid")

@@ -18,6 +18,7 @@ Estimated latency per switch: 1-3 seconds.
 import ubluetooth
 import time
 from utils import logger
+from config import CONFIG
 
 class BleModeManager:
 
@@ -39,6 +40,9 @@ class BleModeManager:
 
         # Optional callback to update the display during the switch
         self.on_mode_change = None
+
+        self._peripheral_start = 0
+        self._mac_checked      = False
 
     # -----------------------------------------------------------------------
     # Public API
@@ -74,6 +78,9 @@ class BleModeManager:
                 pass
         except Exception as e:
             logger.warning("BleModeManager: macropad disconnect error: %s", e)
+
+        self._peripheral_start = time.time()
+        self._mac_checked      = False
 
         # 2. Start the BLE peripheral server (advertising toward the phone)
         try:
@@ -114,21 +121,48 @@ class BleModeManager:
 
     def poll(self):
         """
-        Called on every iteration of the main loop in peripheral mode.
-        Checks whether the phone has connected and received the packet.
+        Chiamato a ogni ciclo del main loop in modalità peripheral.
+
+        Ritorni possibili:
+        None                      → non siamo in modalità peripheral
+        {"countdown": N}          → in attesa del telefono, N secondi al timeout
+        {"timeout": True}         → timeout scaduto, siamo tornati a central
         """
         if self._mode != self.MODE_PERIPHERAL:
-            return
+            return None
 
-        # Send the packet to the phone as soon as it connects
+        timeout_s = CONFIG.get("BLE_PHONE_TIMEOUT_S", 30)
+        elapsed   = int(time.time() - self._peripheral_start)
+        remaining = max(0, timeout_s - elapsed)
+
+        # --- Timeout: telefono non connesso entro il limite (Punto 3) ---
+        if elapsed >= timeout_s and not self._bridge.is_connected():
+            logger.info("BleModeManager: timeout telefono, ritorno a centrale")
+            self.switch_to_central()
+            return {"timeout": True}
+
+        # --- MAC Whitelist: controlla alla prima connessione (Punto 1) ---
+        if self._bridge.is_connected() and not self._mac_checked:
+            self._mac_checked = True
+            allowed = CONFIG.get("PHONE_MAC", "").upper().strip()
+            peer    = self._bridge.get_peer_addr_str()
+            if allowed and allowed != "XX:XX:XX:XX:XX:XX" and peer != allowed:
+                logger.warning("BleModeManager: MAC %s non in whitelist, disconnessione", peer)
+                self._bridge.disconnect()
+                self._mac_checked = False   # reset per il prossimo tentativo
+                return {"countdown": remaining}
+
+        # --- Invia pacchetto appena il telefono si connette ---
         if self._bridge.is_connected() and self._pending_packet is not None:
             packet_str = str(self._pending_packet)
             try:
                 self._bridge.send_result(packet_str)
-                logger.info("BleModeManager: packet sent to the phone")
+                logger.info("BleModeManager: pacchetto inviato al telefono")
                 self._pending_packet = None
             except Exception as e:
-                logger.warning("BleModeManager: packet send error: %s", e)
+                logger.warning("BleModeManager: errore invio pacchetto: %s", e)
+
+        return {"countdown": remaining}
 
     def _notify(self, state):
         if self.on_mode_change:

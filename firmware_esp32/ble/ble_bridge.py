@@ -31,6 +31,7 @@ class BLEBridge:
         self.inactivity_timeout = inactivity_timeout
         self.rx_queue = []
         self.needs_advertise = True
+        self._peer_addr = None
     
         service_uuid = ubluetooth.UUID(CONFIG["BLE_SERVICE_UUID"])
         expr_uuid    = ubluetooth.UUID(CONFIG["BLE_EXPR_CHAR_UUID"])
@@ -80,6 +81,20 @@ class BLEBridge:
         finally:
             self.advertising = False
 
+    def get_peer_addr_str(self):
+        """Restituisce il MAC del device connesso come 'XX:XX:XX:XX:XX:XX'."""
+        if self._peer_addr is None:
+            return None
+        return ":".join("{:02X}".format(b) for b in reversed(self._peer_addr))
+
+    def disconnect(self):
+        """Forza la disconnessione del centrale corrente."""
+        if self.conn_handle is not None:
+            try:
+                self.ble.gap_disconnect(self.conn_handle)
+            except Exception as e:
+                logger.warning("BLEBridge: disconnect error: %s", e)
+
     def _clear_connection_state(self, reason=None):
         if self.conn_handle is None:
             return
@@ -87,6 +102,7 @@ class BLEBridge:
         self.conn_handle = None
         self.advertising = False
         self.needs_advertise = True
+        self._peer_addr = None
         self.last_activity = time.time()
 
         if reason:
@@ -94,7 +110,9 @@ class BLEBridge:
 
     def _irq(self, event, data):
         if event == self._IRQ_CENTRAL_CONNECT:
-            self.conn_handle, _, _ = data
+            conn_handle, _, addr = data
+            self.conn_handle = conn_handle
+            self._peer_addr  = bytes(addr)   # little-endian, da invertire per MAC canonico
             self.last_activity = time.time()
             self.advertising = False
             self.needs_advertise = False

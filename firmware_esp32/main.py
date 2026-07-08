@@ -1,8 +1,8 @@
 """
-main.py — Entry point for the ESP32 firmware (Algebra Calculator).
+main.py — Application entry point. Pure orchestration logic; no hardware specifics.
 
-Initializes the display, keypad, and BLE based on CONFIG["DISPLAY_TYPE"] and
-CONFIG["KEYPAD_TYPE"]: no hardware-specific code here, only orchestration logic.
+CalculatorApp receives all peripherals via constructor injection and drives
+the expression-editing → BLE-send → result-display cycle.
 """
 
 import time
@@ -10,280 +10,308 @@ from config import CONFIG
 from core.input_handler import InputHandler
 from drivers.display_scroller import TextScroller
 from drivers.keypad_base import KeypadAction
-
-# ---------------------------------------------------------------------------
-# Display factory
-# ---------------------------------------------------------------------------
-if CONFIG["DISPLAY_TYPE"] == "oled":
-    from drivers.oled_display import OledDisplay
-    display = OledDisplay()
-    DISPLAY_COLS = CONFIG["OLED"]["WIDTH"] // 8   # 16 col con font 8px
-    DISPLAY_ROWS = CONFIG["OLED"]["HEIGHT"] // 8  # 8 righe
-
-else:
-    from drivers.lcd_display import LCDDisplay
-    lcd_cfg = CONFIG["LCD"]
-    display = LCDDisplay(
-        scl_pin=lcd_cfg["SCL_PIN"], sda_pin=lcd_cfg["SDA_PIN"],
-        i2c_addr=lcd_cfg["I2C_ADDR"],
-        cols=lcd_cfg["COLS"], rows=lcd_cfg["ROWS"],
-    )
-    DISPLAY_COLS = lcd_cfg["COLS"]
-    DISPLAY_ROWS = lcd_cfg["ROWS"]
+from hardware_setup import get_hardware
 
 
-def _render(expr, cursor_pos, status="", result=None, is_menu=False,
-            menu_top="", menu_bottom=""):
-    display.render(expr, cursor_pos, status, result, is_menu, menu_top, menu_bottom)
+class CalculatorApp:
 
+    def __init__(self, display, keypad, ble, mode_manager, wdt):
+        self.display      = display
+        self.keypad       = keypad
+        self.ble          = ble          # BLEBridge or None (ble_hid lazy)
+        self.mode_manager = mode_manager # BleModeManager or None
+        self.wdt          = wdt
 
-# ---------------------------------------------------------------------------
-# Keypad + BLE factory
-# ---------------------------------------------------------------------------
-if CONFIG["KEYPAD_TYPE"] == "ble_hid":
-    import ubluetooth
-    from ble.ble_bridge import BLEBridge
-    from drivers.keypad_ble_hid import KeypadBleHid
-    from ble.ble_mode_manager import BleModeManager
- 
-    # A single BLE radio — shared instance
-    _ble = ubluetooth.BLE()
-    _ble.active(True)
- 
-    # 1. BLEBridge FIRST: register the peripheral GATT services
-    #    This must happen BEFORE any gap_connect (central).
-    ble = BLEBridge(ble_instance=_ble, register_irq=False)
- 
-    # 2. KeypadBleHid: same instance, central mode
-    keypad = KeypadBleHid(ble_instance=_ble, register_irq=False)
- 
-    # 3. Shared IRQ dispatcher
-    #    Central events (GATTC, peripheral connect/disconnect): 7-18
-    #    Peripheral events (GATTS write, advertising): 1-6
-    _CENTRAL_EVENTS = frozenset(range(7, 19))
- 
-    def _on_ble_irq(event, data):
-        if event in _CENTRAL_EVENTS:
-            keypad.handle_irq(event, data)
-        else:
-            ble.handle_irq(event, data)
- 
-    _ble.irq(_on_ble_irq)
- 
-    # 4. Start the connection to the macropad (after GATT registration)
-    keypad.start_connect()
+        self.input_handler = InputHandler()
+        self.scroller      = TextScroller(display.cols)
 
-    mode_manager = BleModeManager(ble_bridge=ble, keypad_ble=keypad)
+        # Result slot written by the BLE callback (IRQ context).
+        self._pending_result = [None]
 
-    def _kp_status():
-        return "KP:OK" if keypad.is_ready() else "KP:..."
+        # Input-loop state.
+        self.last_key        = None
+        self.shift_mode      = None
+        self._last_ble_adv   = 0
+        self._last_countdown = -1
 
-else:
-    from drivers.keypad_matrix import KeypadMatrix
-    from ble.ble_bridge import BLEBridge
+        # Waiting-prompt state: show "In attesa di input..." until first keypress.
+        self._kp_was_ready   = False
+        self._awaiting_input = False
+        self._first_input    = False
 
-    kp_cfg = CONFIG["KEYPAD"]
-    keypad = KeypadMatrix(
-        row_pins=kp_cfg["ROW_PINS"],
-        col_pins=kp_cfg["COL_PINS"],
-        primary_map=kp_cfg["PRIMARY_MAP"],
-        shift_a_map=kp_cfg.get("SHIFT_A_MAP"),
-        shift_b_map=kp_cfg.get("SHIFT_B_MAP"),
-    )
-    ble = BLEBridge()
-    mode_manager = None
+        if self.ble is not None:
+            self.ble.callback = self._on_ble_msg
 
-    def _kp_status():
-        return ""
+    # -----------------------------------------------------------------------
+    # BLE message callback (called from IRQ / poll context)
+    # -----------------------------------------------------------------------
+    def _on_ble_msg(self, msg):
+        self._pending_result[0] = msg
 
+    # -----------------------------------------------------------------------
+    # Display helpers
+    # -----------------------------------------------------------------------
+    def _render(self, expr, cursor_pos, status="", result=None,
+                is_menu=False, menu_top="", menu_bottom=""):
+        self.display.render(expr, cursor_pos, status, result,
+                            is_menu, menu_top, menu_bottom)
 
-# ---------------------------------------------------------------------------
-# BLE callback: result from the phone
-# ---------------------------------------------------------------------------
-_pending_result = [None]
-
-def _on_ble_msg(msg):
-    _pending_result[0] = msg
-
-ble.callback = _on_ble_msg
-
-
-# ---------------------------------------------------------------------------
-# Helpers display
-# ---------------------------------------------------------------------------
-def _status_line(shift_mode=None):
-    """Status line: shift mode for matrix, connection state for ble_hid."""
-    if CONFIG["KEYPAD_TYPE"] == "matrix":
-        if shift_mode == "A":   return "[SH-A]"
-        if shift_mode == "B":   return "[SH-B]"
-        return ""
-    return _kp_status()
-
-
-# ---------------------------------------------------------------------------
-# Main loop
-# ---------------------------------------------------------------------------
-def main():
-    input_handler = InputHandler()
-    scroller      = TextScroller(DISPLAY_COLS)
-
-    display.show_loading()
-    time.sleep_ms(800)
-
-    # Start advertising (only for the matrix keypad or ble_hid after keypad connection)
-    if CONFIG["KEYPAD_TYPE"] != "ble_hid":
-        ble.start_advertising(force=True)
-
-    last_key     = None
-    last_ble_adv = time.time()
-    shift_mode   = None   # only for the matrix keypad
-
-    while True:
-        # -- BLE poll --
-        ble.poll()
-
-        # Matrix: restart advertising if disconnected
+    def _status_line(self):
         if CONFIG["KEYPAD_TYPE"] == "matrix":
-            if not ble.is_connected():
+            if self.shift_mode == "A": return "[SH-A]"
+            if self.shift_mode == "B": return "[SH-B]"
+            return ""
+        return "KP:OK" if self.keypad.is_ready() else "KP:..."
+
+    # -----------------------------------------------------------------------
+    # run(): initial UI setup + main loop
+    # -----------------------------------------------------------------------
+    def run(self):
+        self.display.show_loading()
+        time.sleep_ms(800)
+        if self.wdt: self.wdt.feed()
+
+        if CONFIG["KEYPAD_TYPE"] != "ble_hid":
+            self.ble.start_advertising(force=True)
+
+        self._last_ble_adv = time.time()
+
+        # Matrix keypad is always ready; show the waiting prompt immediately.
+        if CONFIG["KEYPAD_TYPE"] == "matrix":
+            self._kp_was_ready   = True
+            self._awaiting_input = True
+            self.display.clear()
+            self.display.show_text("In attesa di", 3)
+            self.display.show_text("  input...", 4)
+
+        while True:
+            if self.wdt: self.wdt.feed()
+            self._poll_network()
+            if self._handle_pending_result():
+                continue
+            time.sleep_ms(20)
+            self._handle_input()
+
+    # -----------------------------------------------------------------------
+    # _poll_network(): BLE polling, re-advertising, countdown display
+    # -----------------------------------------------------------------------
+    def _poll_network(self):
+        if self.ble is not None:
+            self.ble.poll()
+
+        if CONFIG["KEYPAD_TYPE"] == "matrix":
+            if not self.ble.is_connected():
                 now = time.time()
-                if now - last_ble_adv > 5:
-                    ble.start_advertising()
-                    last_ble_adv = now
+                if now - self._last_ble_adv > 5:
+                    self.ble.start_advertising()
+                    self._last_ble_adv = now
+
         else:
-            # BLE HID: poll mode manager
-            if mode_manager:
-                mode_manager.poll()
+            # Detect the first macropad connection and show the waiting prompt.
+            if not self._kp_was_ready and self.keypad.is_ready():
+                self._kp_was_ready   = True
+                self._awaiting_input = True
+                self.display.clear()
+                self.display.show_text("In attesa di", 3)
+                self.display.show_text("  input...", 4)
 
-        # -- Result from the phone --
-        if _pending_result[0] is not None:
-            msg = _pending_result[0]
-            _pending_result[0] = None
+            if self.mode_manager is not None:
+                poll_info = self.mode_manager.poll()
+                if isinstance(poll_info, dict):
+                    if poll_info.get("timeout"):
+                        # Timeout expired: notify user then return to idle.
+                        self._render(self.input_handler.expr,
+                                     self.input_handler.cursor_pos,
+                                     status="Timeout:no phone")
+                        time.sleep_ms(2000)
+                        if self.wdt: self.wdt.feed()
+                        self._last_countdown = -1
+                        self._render(self.input_handler.expr,
+                                     self.input_handler.cursor_pos,
+                                     status=self._status_line())
+                    elif "countdown" in poll_info:
+                        cd = poll_info["countdown"]
+                        if cd != self._last_countdown:   # redraw only on second change
+                            self._last_countdown = cd
+                            self._render(self.input_handler.expr,
+                                         self.input_handler.cursor_pos,
+                                         status="App...{}s".format(cd))
 
-            if msg.startswith("result:"):
-                result_text = msg[7:]
-                input_handler.store_local_result(result_text)
-                _render(input_handler.expr, input_handler.cursor_pos,
-                        status=_status_line(shift_mode),
-                        result=result_text)
-                time.sleep_ms(2000)
-            elif msg.startswith("error:"):
-                _render(input_handler.expr, input_handler.cursor_pos,
-                        status="ERROR: " + msg[6:])
-                time.sleep_ms(2000)
+    # -----------------------------------------------------------------------
+    # _handle_pending_result(): process a reply from the phone
+    # Returns True so the caller can `continue` the main loop immediately.
+    # -----------------------------------------------------------------------
+    def _handle_pending_result(self):
+        if self._pending_result[0] is None:
+            return False
 
-            # Return to normal/central mode
-            if mode_manager:
-                mode_manager.switch_to_central()
-            else:
-                ble.start_advertising(force=True)
-            _render(input_handler.expr, input_handler.cursor_pos,
-                    status=_status_line(shift_mode))
-            time.sleep_ms(50)
-            continue
+        msg = self._pending_result[0]
+        self._pending_result[0] = None
+        self._last_countdown = -1
 
-        time.sleep_ms(20)
+        if msg.startswith("result:"):
+            result_text = msg[7:]
+            self.input_handler.store_local_result(result_text)
+            self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                         status=self._status_line(), result=result_text)
+            time.sleep_ms(2000)
+            if self.wdt: self.wdt.feed()
+        elif msg.startswith("error:"):
+            self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                         status="ERROR: " + msg[6:])
+            time.sleep_ms(2000)
+            if self.wdt: self.wdt.feed()
 
-        # -- Read key --
-        key = keypad.update()
-        if key is None or key == last_key:
-            last_key = key
-            continue
-        last_key = key
+        # Resume the appropriate BLE role.
+        if self.mode_manager is not None:
+            self.mode_manager.switch_to_central()
+        else:
+            self.ble.start_advertising(force=True)
 
-        # Shift mode (matrix only)
+        self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                     status=self._status_line())
+        time.sleep_ms(50)
+        return True
+
+    # -----------------------------------------------------------------------
+    # _handle_input(): read one keypress and dispatch to the right handler
+    # -----------------------------------------------------------------------
+    def _handle_input(self):
+        key = self.keypad.update()
+        if key is None or key == self.last_key:
+            self.last_key = key
+            return
+
+        self.last_key = key
+
+        # Shift-layer toggles (matrix mode only).
         if CONFIG["KEYPAD_TYPE"] == "matrix":
             if key == KeypadAction.SHIFT_A:
-                shift_mode = None if shift_mode == "A" else "A"
-                _render(input_handler.expr, input_handler.cursor_pos,
-                        status=_status_line(shift_mode))
-                continue
+                self.shift_mode = None if self.shift_mode == "A" else "A"
+                self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                             status=self._status_line())
+                return
             if key == KeypadAction.SHIFT_B:
-                shift_mode = None if shift_mode == "B" else "B"
-                _render(input_handler.expr, input_handler.cursor_pos,
-                        status=_status_line(shift_mode))
-                continue
+                self.shift_mode = None if self.shift_mode == "B" else "B"
+                self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                             status=self._status_line())
+                return
 
-        # -- Process key --
-        result = input_handler.process_key(key)
+        result = self.input_handler.process_key(key)
 
-        # --- Ready packet: send to the phone ---
         if isinstance(result, tuple):
-            expr, req_type, action, val = result
+            self._handle_send(result)
+        elif isinstance(result, dict):
+            self._handle_menu(result)
+        else:
+            self._update_display(key)
 
-            if not expr.strip():
-                _render("Expression", 0, status="empty!")
-                time.sleep_ms(1000)
-                _render(input_handler.expr, input_handler.cursor_pos,
-                        status=_status_line(shift_mode))
-                continue
+    # -----------------------------------------------------------------------
+    # _handle_send(): validate and transmit an expression packet to the phone
+    # -----------------------------------------------------------------------
+    def _handle_send(self, result):
+        expr, req_type, action, val = result
 
-            packet_str = str(result)
+        if not expr.strip():
+            self._render("Expression", 0, status="empty!")
+            time.sleep_ms(1000)
+            if self.wdt: self.wdt.feed()
+            self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                         status=self._status_line())
+            self.keypad.reset_shift()
+            self.shift_mode = None
+            return
 
-            if mode_manager:
-                # BLE HID: switch to peripheral, then send
-                mode_manager.switch_to_peripheral(result)
-                _render(input_handler.expr, input_handler.cursor_pos,
-                        status="Sending...")
+        if CONFIG["KEYPAD_TYPE"] == "ble_hid":
+            if self.ble is None:
+                self._lazy_init_ble()
+            self._last_countdown = CONFIG.get("BLE_PHONE_TIMEOUT_S", 30)
+            self.mode_manager.switch_to_peripheral(result)
+            self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                         status="App...{}s".format(self._last_countdown))
+        else:
+            if self.ble.is_connected():
+                self.ble.send_result(str(result))
+                self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                             status="Waiting RPi...")
             else:
-                # Matrix: send directly over the BLE peripheral
-                if ble.is_connected():
-                    ble.send_result(packet_str)
-                    _render(input_handler.expr, input_handler.cursor_pos,
-                            status="Waiting RPi...")
-                else:
-                    _render(input_handler.expr, input_handler.cursor_pos,
-                            status="Phone offline")
-                    time.sleep_ms(1500)
-                    _render(input_handler.expr, input_handler.cursor_pos,
-                            status=_status_line(shift_mode))
+                self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                             status="Phone offline")
+                time.sleep_ms(1500)
+                if self.wdt: self.wdt.feed()
+                self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                             status=self._status_line())
 
-            keypad.reset_shift()
-            shift_mode = None
-            continue
+        self.keypad.reset_shift()
+        self.shift_mode = None
 
-        # --- Menu ---
-        if isinstance(result, dict):
-            if result.get("menu_open"):
-                keypad.reset_shift()
-                shift_mode = None
-                prompt_top, prompt_bottom = input_handler.get_menu_prompt()
-                _render("", 0, is_menu=True,
-                        menu_top=prompt_top, menu_bottom=prompt_bottom)
-                continue
+    # -----------------------------------------------------------------------
+    # _lazy_init_ble(): deferred BLEBridge + BleModeManager allocation.
+    # Called only on the first TX when KEYPAD_TYPE == "ble_hid".
+    # RAM is compacted before allocation to maximise contiguous free heap.
+    # -----------------------------------------------------------------------
+    def _lazy_init_ble(self):
+        import gc
+        gc.collect()
+        from ble.ble_bridge import BLEBridge
+        from ble.ble_mode_manager import BleModeManager
+        self.ble          = BLEBridge(ble_instance=self.keypad.ble_radio,
+                                      register_irq=False)
+        self.ble.callback = self._on_ble_msg
+        self.mode_manager = BleModeManager(ble_bridge=self.ble,
+                                           keypad_ble=self.keypad)
+        # Wire the new bridge into the IRQ router set up in hardware_setup.py.
+        self.keypad._bridge_ref[0] = self.ble
 
-            if result.get("menu_choice") is not None:
-                prompt_top, prompt_bottom = input_handler.get_menu_prompt()
-                _render("", 0, is_menu=True,
-                        menu_top=prompt_top,
-                        menu_bottom="Sel:" + result["menu_choice"])
-                continue
+    # -----------------------------------------------------------------------
+    # _handle_menu(): route a menu result dict to the correct display update
+    # -----------------------------------------------------------------------
+    def _handle_menu(self, result):
+        if result.get("menu_open"):
+            self.keypad.reset_shift()
+            self.shift_mode = None
+            pt, pb = self.input_handler.get_menu_prompt()
+            self._render("", 0, is_menu=True, menu_top=pt, menu_bottom=pb)
 
-            if result.get("menu_cancelled"):
-                keypad.reset_shift()
-                shift_mode = None
-                _render(input_handler.expr, input_handler.cursor_pos,
-                        status=_status_line(shift_mode))
-                continue
+        elif result.get("menu_choice") is not None:
+            pt, pb = self.input_handler.get_menu_prompt()
+            self._render("", 0, is_menu=True, menu_top=pt,
+                         menu_bottom="Sel:" + result["menu_choice"])
 
-            if result.get("menu_error") == "empty_expression":
-                _render("Expression", 0, status="empty!")
-                time.sleep_ms(1000)
-                _render(input_handler.expr, input_handler.cursor_pos,
-                        status=_status_line(shift_mode))
-                continue
+        elif result.get("menu_cancelled"):
+            self.keypad.reset_shift()
+            self.shift_mode = None
+            self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                         status=self._status_line())
 
-            if result.get("menu_error") == "select_type":
-                prompt_top, _ = input_handler.get_menu_prompt()
-                _render("", 0, is_menu=True,
-                        menu_top=prompt_top, menu_bottom="Choose 1-3")
-                continue
+        elif result.get("menu_error") == "empty_expression":
+            self._render("Expression", 0, status="empty!")
+            time.sleep_ms(1000)
+            if self.wdt: self.wdt.feed()
+            self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                         status=self._status_line())
 
-        # --- Normal input: update display ---
-        if result is None:
-            visible = scroller.update(input_handler.expr, input_handler.cursor_pos)
-            _render(visible, input_handler.cursor_pos,
-                    status=_status_line(shift_mode))
+        elif result.get("menu_error") == "select_type":
+            pt, _ = self.input_handler.get_menu_prompt()
+            self._render("", 0, is_menu=True, menu_top=pt, menu_bottom="Choose 1-3")
+
+    # -----------------------------------------------------------------------
+    # _update_display(): refresh expression line after a normal keypress
+    # -----------------------------------------------------------------------
+    def _update_display(self, key):
+        # First character typed clears the waiting prompt.
+        if self._awaiting_input and not self._first_input and isinstance(key, str):
+            self._first_input    = True
+            self._awaiting_input = False
+
+        if not self._awaiting_input:
+            visible = self.scroller.update(self.input_handler.expr,
+                                           self.input_handler.cursor_pos)
+            self._render(visible, self.input_handler.cursor_pos,
+                         status=self._status_line())
 
 
 if __name__ == "__main__":
-    main()
+    hw_display, hw_keypad, hw_ble, hw_mode_manager, hw_wdt = get_hardware()
+    app = CalculatorApp(hw_display, hw_keypad, hw_ble, hw_mode_manager, hw_wdt)
+    app.run()
