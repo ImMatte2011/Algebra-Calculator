@@ -6,6 +6,7 @@ the expression-editing → BLE-send → result-display cycle.
 """
 
 import time
+import sys
 from config import CONFIG
 from core.input_handler import InputHandler
 from drivers.display_scroller import TextScroller
@@ -223,8 +224,6 @@ class CalculatorApp:
             return
 
         if CONFIG["KEYPAD_TYPE"] == "ble_hid":
-            if self.ble is None:
-                self._lazy_init_ble()
             self._last_countdown = CONFIG.get("BLE_PHONE_TIMEOUT_S", 30)
             self.mode_manager.switch_to_peripheral(result)
             self._render(self.input_handler.expr, self.input_handler.cursor_pos,
@@ -244,24 +243,6 @@ class CalculatorApp:
 
         self.keypad.reset_shift()
         self.shift_mode = None
-
-    # -----------------------------------------------------------------------
-    # _lazy_init_ble(): deferred BLEBridge + BleModeManager allocation.
-    # Called only on the first TX when KEYPAD_TYPE == "ble_hid".
-    # RAM is compacted before allocation to maximise contiguous free heap.
-    # -----------------------------------------------------------------------
-    def _lazy_init_ble(self):
-        import gc
-        gc.collect()
-        from ble.ble_bridge import BLEBridge
-        from ble.ble_mode_manager import BleModeManager
-        self.ble          = BLEBridge(ble_instance=self.keypad.ble_radio,
-                                      register_irq=False)
-        self.ble.callback = self._on_ble_msg
-        self.mode_manager = BleModeManager(ble_bridge=self.ble,
-                                           keypad_ble=self.keypad)
-        # Wire the new bridge into the IRQ router set up in hardware_setup.py.
-        self.keypad._bridge_ref[0] = self.ble
 
     # -----------------------------------------------------------------------
     # _handle_menu(): route a menu result dict to the correct display update
@@ -314,4 +295,26 @@ class CalculatorApp:
 if __name__ == "__main__":
     hw_display, hw_keypad, hw_ble, hw_mode_manager, hw_wdt = get_hardware()
     app = CalculatorApp(hw_display, hw_keypad, hw_ble, hw_mode_manager, hw_wdt)
-    app.run()
+    try:
+        app.run()
+    except KeyboardInterrupt:
+            print("\n[WAKE] User interrupt detected.")
+
+    except Exception as e:
+        print("\n[ERROR]")
+        sys.print_exception(e)
+        time.sleep_ms(2000)
+
+    finally:
+        if hw_ble is not None:
+            print("[CLEANUP] Forced NimBLE stack deactivation...")
+            try:
+                import ubluetooth
+                ubluetooth.BLE().active(False)
+
+                import time
+                time.sleep_ms(300)
+ 
+                print("[CLEANUP] Stack powered off. Safe REPL.")
+            except:
+                pass

@@ -20,7 +20,7 @@ _UUID_HID_REPORT      = ubluetooth.UUID(0x2A4D)
 _UUID_BOOT_KEYBOARD   = ubluetooth.UUID(0x2A22)
 _UUID_BOOT_MOUSE      = ubluetooth.UUID(0x2A33)
 _UUID_CCCD            = ubluetooth.UUID(0x2902)
-_NOTIFY_ENABLE        = b'\x03\x00'  # notify + indicate
+_NOTIFY_ENABLE        = b'\x01\x00'  # notify
 
 _MOD_SHIFT = 0x22   # LSHIFT | RSHIFT
 
@@ -106,6 +106,7 @@ class KeypadBleHid(KeypadBase):
     _IRQ_GATTC_DESCRIPTOR_DONE        = 14
     _IRQ_GATTC_WRITE_DONE             = 17
     _IRQ_GATTC_NOTIFY                 = 18
+    _IRQ_ENCRYPTION_UPDATE            = 28
 
     RECONNECT_DELAY_MS = 3000
 
@@ -119,6 +120,11 @@ class KeypadBleHid(KeypadBase):
         if register_irq:
             self._ble.irq(self._irq)
         # If register_irq=False, the dispatcher in main.py calls handle_irq()
+
+        try:
+            self._ble.config(bond=True, mitm=False, le_secure=True)
+        except Exception as exc:
+            logger.warning("KeypadBleHid: BLE config failed: %s", exc)
     
         self._conn              = None
         self._phase             = "idle"
@@ -157,62 +163,80 @@ class KeypadBleHid(KeypadBase):
                 pass
 
     def _irq(self, event, data):
-        if event == self._IRQ_PERIPHERAL_CONNECT:
-            conn, _, _ = data
-            self._conn = conn
-            self._phase = "discover_services"
-            self._all_services   = []
-            self._report_handles = []
-            self._cccd_queue     = []
-            self._ble.gattc_discover_services(conn)
+        try:
+            if event == self._IRQ_PERIPHERAL_CONNECT:
+                conn, _, _ = data
+                self._conn = conn
+                self._phase = "pairing"
+                self._all_services   = []
+                self._report_handles = []
+                self._cccd_queue     = []
+                print("[INFO] BLE HID connected, starting pairing")
+                self._ble.gap_pair(conn)
 
-        elif event == self._IRQ_PERIPHERAL_DISCONNECT:
-            self._conn  = None
-            self._phase = "disconnected"
-            self._last_disconnect_ms = time.ticks_ms()
-            logger.info("KeypadBleHid: disconnesso")
-            self._notify_state("disconnected")
+            elif event == self._IRQ_PERIPHERAL_DISCONNECT:
+                self._conn  = None
+                self._phase = "disconnected"
+                self._last_disconnect_ms = time.ticks_ms()
+                logger.info("KeypadBleHid: disconnesso")
+                self._notify_state("disconnected")
 
-        elif event == self._IRQ_GATTC_SERVICE_RESULT:
-            _, s, e, uuid = data
-            self._all_services.append((s, e, ubluetooth.UUID(uuid)))
+            elif event == self._IRQ_GATTC_SERVICE_RESULT:
+                _, s, e, uuid = data
+                self._all_services.append((s, e, ubluetooth.UUID(uuid)))
 
-        elif event == self._IRQ_GATTC_SERVICE_DONE:
-            hid = [(s, e) for s, e, u in self._all_services if u == _UUID_HID_SERVICE]
-            if hid:
-                self._hid_service = hid[0]
-                self._phase = "discover_chars"
-                self._ble.gattc_discover_characteristics(self._conn, *hid[0])
-            else:
-                logger.warning("KeypadBleHid: HID service not found")
+            elif event == self._IRQ_GATTC_SERVICE_DONE:
+                hid = [(s, e) for s, e, u in self._all_services if u == _UUID_HID_SERVICE]
+                if hid:
+                    self._hid_service = hid[0]
+                    self._phase = "discover_chars"
+                    self._ble.gattc_discover_characteristics(self._conn, *hid[0])
+                else:
+                    logger.warning("KeypadBleHid: HID service not found")
 
-        elif event == self._IRQ_GATTC_CHARACTERISTIC_RESULT:
-            _, def_h, val_h, props, uuid = data
-            u = ubluetooth.UUID(uuid)
-            if (u == _UUID_HID_REPORT or u == _UUID_BOOT_MOUSE or u == _UUID_BOOT_KEYBOARD) and (props & 0x10):
-                self._report_handles.append((def_h, val_h))
+            elif event == self._IRQ_GATTC_CHARACTERISTIC_RESULT:
+                _, def_h, val_h, props, uuid = data
+                u = ubluetooth.UUID(uuid)
+                if (u == _UUID_HID_REPORT or u == _UUID_BOOT_MOUSE or u == _UUID_BOOT_KEYBOARD) and (props & 0x10):
+                    self._report_handles.append((def_h, val_h))
 
-        elif event == self._IRQ_GATTC_CHARACTERISTIC_DONE:
-            self._phase = "discover_desc"
-            self._current_char_idx = 0
-            self._discover_next_desc()
+            elif event == self._IRQ_GATTC_CHARACTERISTIC_DONE:
+                self._phase = "discover_desc"
+                self._current_char_idx = 0
+                self._discover_next_desc()
 
-        elif event == self._IRQ_GATTC_DESCRIPTOR_RESULT:
-            _, dsc_h, uuid = data
-            if ubluetooth.UUID(uuid) == _UUID_CCCD:
-                vh = self._report_handles[self._current_char_idx][1]
-                self._cccd_queue.append((vh, dsc_h))
+            elif event == self._IRQ_GATTC_DESCRIPTOR_RESULT:
+                _, dsc_h, uuid = data
+                if ubluetooth.UUID(uuid) == _UUID_CCCD:
+                    vh = self._report_handles[self._current_char_idx][1]
+                    self._cccd_queue.append((vh, dsc_h))
 
-        elif event == self._IRQ_GATTC_DESCRIPTOR_DONE:
-            self._current_char_idx += 1
-            self._discover_next_desc()
+            elif event == self._IRQ_GATTC_DESCRIPTOR_DONE:
+                self._current_char_idx += 1
+                self._discover_next_desc()
 
-        elif event == self._IRQ_GATTC_WRITE_DONE:
-            self._enable_next_cccd()
+            elif event == self._IRQ_GATTC_WRITE_DONE:
+                self._enable_next_cccd()
 
-        elif event == self._IRQ_GATTC_NOTIFY:
-            _, value_handle, notify_data = data
-            self._handle_notify(bytes(notify_data))
+            elif event == self._IRQ_GATTC_NOTIFY:
+                _, value_handle, notify_data = data
+                print("HANDLE:", value_handle, "RAW:", bytes(notify_data).hex())
+                self._handle_notify(bytes(notify_data))
+
+            elif event == self._IRQ_ENCRYPTION_UPDATE:
+                conn_handle = data[0] if len(data) > 0 else self._conn
+                encrypted = data[1] if len(data) > 1 else False
+                bonded = data[2] if len(data) > 2 else False
+                if encrypted:
+                    print("[INFO] BLE channel encrypted. Bonding:", bonded)
+                    self._conn = conn_handle
+                    self._phase = "discover_services"
+                    self._ble.gattc_discover_services(conn_handle)
+                else:
+                    print("[WARNING] BLE encryption failed or was rejected")
+                    self._phase = "waiting_encryption"
+        except Exception as exc:
+            print("[ERROR] BLE IRQ handler failed:", exc)
 
     def _discover_next_desc(self):
         if self._current_char_idx >= len(self._report_handles):
@@ -236,14 +260,15 @@ class KeypadBleHid(KeypadBase):
             self._notify_state("ready")
 
     def _handle_notify(self, data):
-        # Standard keyboard report: 8 bytes, [modifier, 0x00, key1..key6]
-        # Some HID devices include a report ID: 9 bytes, [report_id, modifier, 0x00, key1..key6]
-        if len(data) >= 3 and data[1] == 0x00:
-            modifier = data[0]
-            key_bytes = data[2:]
-        elif len(data) >= 4 and data[2] == 0x00:
+        print("PARSED:", data.hex())    # debug
+        # HID report with Report ID: [report_id, modifier, reserved, key1..key6]
+        if len(data) >= 4 and data[2] == 0x00:
             modifier = data[1]
             key_bytes = data[3:]
+        # Standard Boot Keyboard: [modifier, reserved, key1..key6]
+        elif len(data) >= 3 and data[1] == 0x00:
+            modifier = data[0]
+            key_bytes = data[2:]
         else:
             logger.debug("HID notify format unknown: %s", data)
             return

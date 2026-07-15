@@ -23,7 +23,7 @@ class BLEBridge:
             self.ble.irq(self._irq)
     
         self.callback = callback_on_receive
-        self.conn_handle = None
+        self.phone_conn = None
         self.last_activity = time.time()
         self.last_advertise = 0
         self.advertising = False
@@ -58,7 +58,7 @@ class BLEBridge:
         logger.info("BLE advertising started")
 
     def start_advertising(self, force=False):
-        if self.conn_handle is not None:
+        if self.phone_conn is not None:
             return
 
         now = time.time()
@@ -89,17 +89,17 @@ class BLEBridge:
 
     def disconnect(self):
         """Forza la disconnessione del centrale corrente."""
-        if self.conn_handle is not None:
+        if self.phone_conn is not None:
             try:
-                self.ble.gap_disconnect(self.conn_handle)
+                self.ble.gap_disconnect(self.phone_conn)
             except Exception as e:
                 logger.warning("BLEBridge: disconnect error: %s", e)
 
     def _clear_connection_state(self, reason=None):
-        if self.conn_handle is None:
+        if self.phone_conn is None:
             return
 
-        self.conn_handle = None
+        self.phone_conn = None
         self.advertising = False
         self.needs_advertise = True
         self._peer_addr = None
@@ -140,7 +140,7 @@ class BLEBridge:
         return self.is_connected()
 
     def _check_inactivity(self):
-        if self.conn_handle is None:
+        if self.phone_conn is None:
             return
 
         if time.time() - self.last_activity > self.inactivity_timeout:
@@ -159,17 +159,17 @@ class BLEBridge:
 
     def is_connected(self):
         self._check_inactivity()
-        return self.conn_handle is not None
+        return self.phone_conn is not None
 
     def send_result(self, result_str):
-        if self.conn_handle is None:
+        if self.phone_conn is None:
             logger.info("BLE not connected, skip send")
             return
 
         try:
             data = result_str.encode("utf-8")
             self.ble.gatts_write(self.result_handle, data)
-            self.ble.gatts_notify(self.conn_handle, self.result_handle, data)
+            self.ble.gatts_notify(self.phone_conn, self.result_handle, data)
             self.last_activity = time.time()
             logger.info("BLE notification sent: %s", result_str)
         except Exception as e:

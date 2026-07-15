@@ -48,35 +48,58 @@ def get_hardware():
     if CONFIG["KEYPAD_TYPE"] == "ble_hid":
         import ubluetooth
         from drivers.keypad_ble_hid import KeypadBleHid
-
-        # Single BLE radio shared by keypad and the lazily-allocated BLEBridge.
+        from ble.ble_bridge import BLEBridge
+        from ble.ble_mode_manager import BleModeManager
+        
+        # Single BLE radio shared by keypad and the BLEBridge.
         _ble = ubluetooth.BLE()
-        _ble.active(True)
+        if not _ble.active():
+            _ble.active(True)
 
         keypad = KeypadBleHid(ble_instance=_ble, register_irq=False)
 
-        # Expose the raw radio so CalculatorApp can create BLEBridge lazily.
+        # Expose the raw radio so
+        #  CalculatorApp can create BLEBridge lazily.
         keypad.ble_radio = _ble
 
         # Mutable slot: CalculatorApp writes self.ble here after lazy init so
         # the IRQ router below can forward peripheral-role events to the bridge.
-        _bridge_ref = [None]
+        ble = BLEBridge(
+            ble_instance=_ble,
+            register_irq=False
+        )
+
+        _bridge_ref = [ble]
         keypad._bridge_ref = _bridge_ref
+
+        mode_manager = BleModeManager(
+            ble_bridge=ble,
+            keypad_ble=keypad
+        )
 
         _CENTRAL_EVENTS = frozenset(range(7, 19))
 
         def _on_ble_irq(event, data):
             if event in _CENTRAL_EVENTS:
                 keypad.handle_irq(event, data)
+            elif event in (28, 29, 30, 31):
+                # Eventi di sicurezza/pairing (Encryption, Secrets, Passkey)
+                # Cruciali per la tastiera HID. Li inoltriamo a entrambi in sicurezza.
+                try:
+                    keypad.handle_irq(event, data)
+                except Exception:
+                    pass
+                
+                if _bridge_ref[0] is not None:
+                    try:
+                        _bridge_ref[0].handle_irq(event, data)
+                    except Exception:
+                        pass
             elif _bridge_ref[0] is not None:
                 _bridge_ref[0].handle_irq(event, data)
 
         _ble.irq(_on_ble_irq)
         keypad.start_connect()
-
-        # BLEBridge and BleModeManager are deferred until the first TX.
-        ble          = None
-        mode_manager = None
 
     else:
         from drivers.keypad_matrix import KeypadMatrix
