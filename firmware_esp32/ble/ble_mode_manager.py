@@ -33,6 +33,8 @@ class BleModeManager:
             ble_bridge: instance of BlePeripheral / BleServer (the server toward the phone)
             keypad_ble: instance of KeypadBleHid (the client toward the macropad)
         """
+        self._connected_at = 0
+
         self._bridge  = ble_bridge
         self._keypad  = keypad_ble
         self._mode    = self.MODE_CENTRAL
@@ -63,19 +65,16 @@ class BleModeManager:
             return
 
         self._pending_packet = packet
+        self._connected_at   = 0
         self._mode = self.MODE_SWITCHING
         self._notify("switching_to_phone")
         logger.info("BleModeManager: switch → peripheral")
 
-        # 1. Disconnect the macropad (KeypadBleHid will handle the reconnect afterward)
-        #    The BLE instance is shared — stop only the central side
+        # 1. Disconnect the macropad
         try:
-            if self._keypad.is_connected():
-                # gap_connect(None) does not exist in ubluetooth — the disconnect
-                # happens implicitly when gap_advertise is started.
-                # KeypadBleHid detects _IRQ_PERIPHERAL_DISCONNECT and queues
-                # the reconnect with its timer.
-                pass
+            if hasattr(self._keypad, '_conn_handle') and self._keypad._conn_handle is not None:
+                self._bridge.ble.gap_disconnect(self._keypad._conn_handle)
+                logger.info("BleModeManager: macropad explicitly disconnected")
         except Exception as e:
             logger.warning("BleModeManager: macropad disconnect error: %s", e)
 
@@ -102,14 +101,13 @@ class BleModeManager:
 
         logger.info("BleModeManager: switch → central")
         self._mode = self.MODE_SWITCHING
+        self._connected_at = 0
 
         try:
             self._bridge.stop_advertising()
         except Exception as e:
             logger.warning("BleModeManager: advertising stop error: %s", e)
 
-        # KeypadBleHid reconnects automatically via its timer
-        # (RECONNECT_DELAY_MS) — no need to force anything here
         self._pending_packet = None
         self._mode = self.MODE_CENTRAL
         self._notify("central_ready")
@@ -124,7 +122,7 @@ class BleModeManager:
         Chiamato a ogni ciclo del main loop in modalità peripheral.
 
         Ritorni possibili:
-        None                      → non siamo in modalità peripheral
+        None                  → non siamo in modalità peripheral
         {"countdown": N}          → in attesa del telefono, N secondi al timeout
         {"timeout": True}         → timeout scaduto, siamo tornati a central
         """
@@ -135,13 +133,13 @@ class BleModeManager:
         elapsed   = int(time.time() - self._peripheral_start)
         remaining = max(0, timeout_s - elapsed)
 
-        # --- Timeout: telefono non connesso entro il limite (Punto 3) ---
+        # --- Timeout: telefono non connesso entro il limite ---
         if elapsed >= timeout_s and not self._bridge.is_connected():
             logger.info("BleModeManager: timeout telefono, ritorno a centrale")
             self.switch_to_central()
             return {"timeout": True}
 
-        # --- MAC Whitelist: controlla alla prima connessione (Punto 1) ---
+        # --- MAC Whitelist: controlla alla prima connessione ---
         if self._bridge.is_connected() and not self._mac_checked:
             self._mac_checked = True
             allowed = CONFIG.get("PHONE_MAC", "").upper().strip()
@@ -152,15 +150,30 @@ class BleModeManager:
                 self._mac_checked = False   # reset per il prossimo tentativo
                 return {"countdown": remaining}
 
-        # --- Invia pacchetto appena il telefono si connette ---
-        if self._bridge.is_connected() and self._pending_packet is not None:
-            packet_str = str(self._pending_packet)
-            try:
-                self._bridge.send_result(packet_str)
-                logger.info("BleModeManager: pacchetto inviato al telefono")
-                self._pending_packet = None
-            except Exception as e:
-                logger.warning("BleModeManager: errore invio pacchetto: %s", e)
+        # --- Invia pacchetto 2 SECONDI DOPO la negoziazione MTU ---
+        if self._bridge.is_connected():
+            if self._connected_at == 0:
+                self._connected_at = time.ticks_ms()
+
+            mtu_time = getattr(self._bridge, "mtu_negotiated_time", 0)
+
+            # Condizione 1: MTU negoziato ed è passato un ritardo di 2000 ms da QUEL momento
+            ready_after_mtu = (mtu_time > 0) and (time.ticks_diff(time.ticks_ms(), mtu_time) >= 2000)
+
+            # Condizione 2 (Fallback): MTU non negoziato ma passati 4000 ms dalla connessione
+            fallback_no_mtu = (mtu_time == 0) and (time.ticks_diff(time.ticks_ms(), self._connected_at) >= 4000)
+
+            if self._pending_packet is not None and (ready_after_mtu or fallback_no_mtu):
+                packet_str = str(self._pending_packet)
+                try:
+                    self._bridge.send_result(packet_str)
+                    reason = "2s post-MTU" if ready_after_mtu else "fallback 4s"
+                    logger.info("BleModeManager: pacchetto inviato al telefono (%s)", reason)
+                    self._pending_packet = None
+                except Exception as e:
+                    logger.warning("BleModeManager: errore invio pacchetto: %s", e)
+        else:
+            self._connected_at = 0
 
         return {"countdown": remaining}
 

@@ -32,6 +32,7 @@ class BLEBridge:
         self.rx_queue = []
         self.needs_advertise = True
         self._peer_addr = None
+        self.mtu_negotiated_time = 0
     
         service_uuid = ubluetooth.UUID(CONFIG["BLE_SERVICE_UUID"])
         expr_uuid    = ubluetooth.UUID(CONFIG["BLE_EXPR_CHAR_UUID"])
@@ -111,14 +112,16 @@ class BLEBridge:
     def _irq(self, event, data):
         if event == self._IRQ_CENTRAL_CONNECT:
             conn_handle, _, addr = data
-            self.conn_handle = conn_handle
+            self.phone_conn = conn_handle
             self._peer_addr  = bytes(addr)   # little-endian, da invertire per MAC canonico
             self.last_activity = time.time()
             self.advertising = False
             self.needs_advertise = False
+            self.mtu_negotiated_time = 0
             logger.info("BLE connected")
 
         elif event == self._IRQ_CENTRAL_DISCONNECT:
+            self.mtu_negotiated_time = 0
             self._clear_connection_state("BLE disconnected")
 
         elif event == self._IRQ_GATTS_WRITE:
@@ -134,7 +137,8 @@ class BLEBridge:
         
         elif event == self._IRQ_MTU_EXCHANGED:
             conn_handle, mtu = data
-            print(f"[INFO] BLE MTU negoziato con Android: {mtu} byte")
+            self.mtu_negotiated_time = time.ticks_ms()
+            logger.info("[INFO] BLE MTU negoziato con Android: %d byte", mtu)
 
     def check_connection(self):
         return self.is_connected()

@@ -73,11 +73,11 @@ class CalculatorApp:
         if self.wdt: self.wdt.feed()
 
         if CONFIG["KEYPAD_TYPE"] != "ble_hid":
-            self.ble.start_advertising(force=True)
-
+            if hasattr(self.ble, 'start_advertising'):
+                if not getattr(self.ble, 'async_mode', False):
+                    self.ble.start_advertising(force=True)
         self._last_ble_adv = time.time()
 
-        # Matrix keypad is always ready; show the waiting prompt immediately.
         if CONFIG["KEYPAD_TYPE"] == "matrix":
             self._kp_was_ready   = True
             self._awaiting_input = True
@@ -85,6 +85,13 @@ class CalculatorApp:
             self.display.show_text("In attesa di", 3)
             self.display.show_text("  input...", 4)
 
+        if getattr(self.ble, 'async_mode', False):
+            import uasyncio
+            uasyncio.run(self._run_async())
+        else:
+            self._run_sync()
+
+    def _run_sync(self):
         while True:
             if self.wdt: self.wdt.feed()
             self._poll_network()
@@ -93,6 +100,19 @@ class CalculatorApp:
             time.sleep_ms(20)
             self._handle_input()
 
+    async def _run_async(self):
+        import uasyncio
+        uasyncio.create_task(self.ble.run_background())
+        # Breve attesa per permettere al background di avviarsi (WiFi connect, ping)
+        await uasyncio.sleep_ms(200)
+        while True:
+            if self.wdt: self.wdt.feed()
+            self._poll_network()
+            if self._handle_pending_result():
+                await uasyncio.sleep_ms(0)
+                continue
+            self._handle_input()
+            await uasyncio.sleep_ms(20)
     # -----------------------------------------------------------------------
     # _poll_network(): BLE polling, re-advertising, countdown display
     # -----------------------------------------------------------------------
@@ -100,15 +120,24 @@ class CalculatorApp:
         if self.ble is not None:
             self.ble.poll()
 
+        # WiFiBridge ha delegato un pacchetto a BLE → main.py gestisce il role-switch
+        if hasattr(self.ble, '_ble_queue') and self.ble._ble_queue:
+            pkt = self.ble._ble_queue.pop(0)
+            if self.mode_manager is not None:
+                self._last_countdown = CONFIG.get("BLE_PHONE_TIMEOUT_S", 30)
+                self.mode_manager.switch_to_peripheral(pkt)
+                self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                            status="App...{}s".format(self._last_countdown))
+            elif hasattr(self.ble, '_ble') and self.ble._ble is not None:
+                self.ble._ble.send_result(str(pkt))
+
         if CONFIG["KEYPAD_TYPE"] == "matrix":
-            if not self.ble.is_connected():
+            if not getattr(self.ble, 'async_mode', False) and not self.ble.is_connected():
                 now = time.time()
                 if now - self._last_ble_adv > 5:
                     self.ble.start_advertising()
                     self._last_ble_adv = now
-
         else:
-            # Detect the first macropad connection and show the waiting prompt.
             if not self._kp_was_ready and self.keypad.is_ready():
                 self._kp_was_ready   = True
                 self._awaiting_input = True
@@ -120,23 +149,22 @@ class CalculatorApp:
                 poll_info = self.mode_manager.poll()
                 if isinstance(poll_info, dict):
                     if poll_info.get("timeout"):
-                        # Timeout expired: notify user then return to idle.
                         self._render(self.input_handler.expr,
-                                     self.input_handler.cursor_pos,
-                                     status="Timeout:no phone")
+                                    self.input_handler.cursor_pos,
+                                    status="Timeout:no phone")
                         time.sleep_ms(2000)
                         if self.wdt: self.wdt.feed()
                         self._last_countdown = -1
                         self._render(self.input_handler.expr,
-                                     self.input_handler.cursor_pos,
-                                     status=self._status_line())
+                                    self.input_handler.cursor_pos,
+                                    status=self._status_line())
                     elif "countdown" in poll_info:
                         cd = poll_info["countdown"]
-                        if cd != self._last_countdown:   # redraw only on second change
+                        if cd != self._last_countdown:
                             self._last_countdown = cd
                             self._render(self.input_handler.expr,
-                                         self.input_handler.cursor_pos,
-                                         status="App...{}s".format(cd))
+                                        self.input_handler.cursor_pos,
+                                        status="App...{}s".format(cd))
 
     # -----------------------------------------------------------------------
     # _handle_pending_result(): process a reply from the phone
@@ -150,6 +178,9 @@ class CalculatorApp:
         self._pending_result[0] = None
         self._last_countdown = -1
 
+        if msg.startswith("res:"):
+            msg = msg[4:]
+
         if msg.startswith("result:"):
             result_text = msg[7:]
             self.input_handler.store_local_result(result_text)
@@ -160,6 +191,13 @@ class CalculatorApp:
         elif msg.startswith("error:"):
             self._render(self.input_handler.expr, self.input_handler.cursor_pos,
                          status="ERROR: " + msg[6:])
+            time.sleep_ms(2000)
+            if self.wdt: self.wdt.feed()
+        else:
+            # Fallback per qualsiasi altro formato di testo/risultato grezzo
+            self.input_handler.store_local_result(msg)
+            self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                         status=self._status_line(), result=msg)
             time.sleep_ms(2000)
             if self.wdt: self.wdt.feed()
 
@@ -218,28 +256,39 @@ class CalculatorApp:
             time.sleep_ms(1000)
             if self.wdt: self.wdt.feed()
             self._render(self.input_handler.expr, self.input_handler.cursor_pos,
-                         status=self._status_line())
+                        status=self._status_line())
             self.keypad.reset_shift()
             self.shift_mode = None
             return
 
-        if CONFIG["KEYPAD_TYPE"] == "ble_hid":
+        is_wifi = getattr(self.ble, 'async_mode', False)
+
+        if is_wifi:
+            # Non-bloccante: send_result() accoda, background task processa
+            self.ble.send_result(str(result))
+            use_direct = getattr(self.ble, '_use_direct', True)
+            status = "WiFi→RPi..." if use_direct else "App (BLE)..."
+            self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                        status=status)
+
+        elif CONFIG["KEYPAD_TYPE"] == "ble_hid" and self.mode_manager is not None:
             self._last_countdown = CONFIG.get("BLE_PHONE_TIMEOUT_S", 30)
             self.mode_manager.switch_to_peripheral(result)
             self._render(self.input_handler.expr, self.input_handler.cursor_pos,
-                         status="App...{}s".format(self._last_countdown))
+                        status="App...{}s".format(self._last_countdown))
+
         else:
             if self.ble.is_connected():
                 self.ble.send_result(str(result))
                 self._render(self.input_handler.expr, self.input_handler.cursor_pos,
-                             status="Waiting RPi...")
+                            status="Waiting RPi...")
             else:
                 self._render(self.input_handler.expr, self.input_handler.cursor_pos,
-                             status="Phone offline")
+                            status="Phone offline")
                 time.sleep_ms(1500)
                 if self.wdt: self.wdt.feed()
                 self._render(self.input_handler.expr, self.input_handler.cursor_pos,
-                             status=self._status_line())
+                            status=self._status_line())
 
         self.keypad.reset_shift()
         self.shift_mode = None
