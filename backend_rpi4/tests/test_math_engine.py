@@ -66,46 +66,46 @@ class TestSolver:
 
     def test_solve_simple_quadratic(self):
         res = parser.parse_input("x^2-1=0", "equation")
-        out = solver.risolvi(res)
+        out = solver.solve(res)
         assert "sol" in out
         sols = set(out["sol"])
         assert sols == {sympy.Integer(-1), sympy.Integer(1)}
 
     def test_solve_linear_equation(self):
         res = parser.parse_input("2*x+3=7", "equation")
-        out = solver.risolvi(res)
+        out = solver.solve(res)
         assert "sol" in out
         sols = set(out["sol"])
         assert sympy.Integer(2) in sols
 
     def test_solve_inequality_gt(self):
         res = parser.parse_input("x>1", "inequality")
-        out = solver.risolvi(res)
+        out = solver.solve(res)
         assert "sol" in out
         assert "1" in str(out["sol"])
 
     def test_solve_inequality_lt(self):
         res = parser.parse_input("x<5", "inequality")
-        out = solver.risolvi(res)
+        out = solver.solve(res)
         assert "sol" in out
         assert "5" in str(out["sol"])
 
     def test_solve_cubic_equation(self):
         res = parser.parse_input("x^3-8=0", "equation")
-        out = solver.risolvi(res)
+        out = solver.solve(res)
         assert "sol" in out
         assert sympy.Integer(2) in out["sol"]
 
     def test_expression_simplification(self):
         res = parser.parse_input("2*x+2", "expression", "simplify")
-        out = solver.risolvi(res)
+        out = solver.solve(res)
         assert "sol" in out
         sol = out["sol"]
         assert "res" in sol
 
     def test_expression_factoring(self):
         res = parser.parse_input("x^2-1", "expression", "factor")
-        out = solver.risolvi(res)
+        out = solver.solve(res)
         assert "sol" in out
         sol = out["sol"]
         assert "res" in sol
@@ -113,7 +113,7 @@ class TestSolver:
 
     def test_no_solution_equation(self):
         res = parser.parse_input("x^2+1=0", "equation")
-        out = solver.risolvi(res)
+        out = solver.solve(res)
         assert "sol" in out
         assert len(out["sol"]) == 0
 

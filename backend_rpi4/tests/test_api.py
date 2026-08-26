@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 try:
     from main import app
 except ModuleNotFoundError:
-    from rpi4.main import app
+    from backend_rpi4.main import app
 
 
 def test_status_endpoint_returns_ok():

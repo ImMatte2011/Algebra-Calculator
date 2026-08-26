@@ -16,7 +16,7 @@ def solve_expression(expr_str: str, type_requested: str, action_requested: str =
     
     if isinstance(solution, dict):
         # Caso tipo "expression" (ha le chiavi "res" ed eventualmente "evaluated")
-        output = str(soluzione.get("res", ""))
+        output = str(solution.get("res", ""))
         if "evaluated" in solution:
             output += f"={solution['evaluated']}"
     else:
