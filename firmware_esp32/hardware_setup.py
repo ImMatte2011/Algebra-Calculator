@@ -1,10 +1,14 @@
 """
-hardware_setup.py — Hardware factory: reads CONFIG and prepares all peripherals.
+hardware_setup.py
 
-This module is the only place that knows about physical pin assignments and
-driver class names. Everything it creates is injected into CalculatorApp.
-
-Public API: get_hardware() -> (display, keypad, ble, mode_manager, wdt)
+COMMUNICATION_MODE  KEYPAD_TYPE  SOLVE_MODE  → configurazione bridge
+─────────────────────────────────────────────────────────────────────
+ble                 ble_hid      —           → BLEBridge + BleModeManager
+ble                 matrix       —           → BLEBridge
+wifi                ble_hid      direct      → WiFiBridge (no BLE peripheral)
+wifi                ble_hid      phone/auto  → WiFiBridge + BLEBridge + ModeManager
+wifi                matrix       direct      → WiFiBridge (no BLE)
+wifi                matrix       phone/auto  → WiFiBridge + BLEBridge
 """
 
 import machine
@@ -12,114 +16,120 @@ from config import CONFIG
 
 
 def get_hardware():
-    """Instantiate and configure every hardware peripheral from CONFIG.
+    comm_mode  = CONFIG.get("COMMUNICATION_MODE", "ble")
+    wifi_cfg   = CONFIG.get("WIFI", {})
+    solve_mode = wifi_cfg.get("SOLVE_MODE", "auto")
+    needs_ble  = (comm_mode == "ble") or (comm_mode == "wifi" and solve_mode in ("auto", "phone"))
 
-    Returns a 5-tuple:
-        display      — configured display driver, with .cols/.rows attributes
-        keypad       — configured keypad driver
-        ble          — BLEBridge instance (matrix) or None (ble_hid, lazy)
-        mode_manager — BleModeManager instance or None (always None here)
-        wdt          — machine.WDT instance or None if watchdog is disabled
-    """
-
-    # -----------------------------------------------------------------------
+    # ---------------------------------------------------------------
     # Display
-    # -----------------------------------------------------------------------
+    # ---------------------------------------------------------------
     if CONFIG["DISPLAY_TYPE"] == "oled":
         from drivers.oled_display import OledDisplay
         display = OledDisplay()
-        display.cols = CONFIG["OLED"]["WIDTH"] // 8   # 16 cols with 8 px font
-        display.rows = CONFIG["OLED"]["HEIGHT"] // 8  # 8 rows with 8 px font
-
+        display.cols = CONFIG["OLED"]["WIDTH"]  // 8
+        display.rows = CONFIG["OLED"]["HEIGHT"] // 8
     else:
         from drivers.lcd_display import LCDDisplay
-        lcd_cfg = CONFIG["LCD"]
+        lcd = CONFIG["LCD"]
         display = LCDDisplay(
-            scl_pin=lcd_cfg["SCL_PIN"], sda_pin=lcd_cfg["SDA_PIN"],
-            i2c_addr=lcd_cfg["I2C_ADDR"],
-            cols=lcd_cfg["COLS"], rows=lcd_cfg["ROWS"],
+            scl_pin=lcd["SCL_PIN"], sda_pin=lcd["SDA_PIN"],
+            i2c_addr=lcd["I2C_ADDR"], cols=lcd["COLS"], rows=lcd["ROWS"],
         )
-        display.cols = lcd_cfg["COLS"]
-        display.rows = lcd_cfg["ROWS"]
+        display.cols = lcd["COLS"]
+        display.rows = lcd["ROWS"]
 
-    # -----------------------------------------------------------------------
-    # Keypad + BLE
-    # -----------------------------------------------------------------------
+    # ---------------------------------------------------------------
+    # BLE HID keypad
+    # ---------------------------------------------------------------
     if CONFIG["KEYPAD_TYPE"] == "ble_hid":
         import ubluetooth
         from drivers.keypad_ble_hid import KeypadBleHid
-        from ble.ble_bridge import BLEBridge
-        from ble.ble_mode_manager import BleModeManager
-        
-        # Single BLE radio shared by keypad and the BLEBridge.
+
         _ble = ubluetooth.BLE()
         if not _ble.active():
             _ble.active(True)
 
         keypad = KeypadBleHid(ble_instance=_ble, register_irq=False)
-
-        # Expose the raw radio so
-        #  CalculatorApp can create BLEBridge lazily.
         keypad.ble_radio = _ble
 
-        # Mutable slot: CalculatorApp writes self.ble here after lazy init so
-        # the IRQ router below can forward peripheral-role events to the bridge.
-        ble = BLEBridge(
-            ble_instance=_ble,
-            register_irq=False
-        )
+        if needs_ble:
+            from ble.ble_bridge import BLEBridge
+            from ble.ble_mode_manager import BleModeManager
 
-        _bridge_ref = [ble]
-        keypad._bridge_ref = _bridge_ref
+            ble_bridge  = BLEBridge(ble_instance=_ble, register_irq=False)
+            _bridge_ref = [ble_bridge]
+            keypad._bridge_ref = _bridge_ref
+            mode_manager = BleModeManager(ble_bridge=ble_bridge, keypad_ble=keypad)
 
-        mode_manager = BleModeManager(
-            ble_bridge=ble,
-            keypad_ble=keypad
-        )
+            _CENTRAL  = frozenset(range(7, 19))
+            _SECURITY = frozenset((28, 29, 30, 31))
 
-        _CENTRAL_EVENTS = frozenset(range(7, 19))
-
-        def _on_ble_irq(event, data):
-            if event in _CENTRAL_EVENTS:
-                keypad.handle_irq(event, data)
-            elif event in (28, 29, 30, 31):
-                # Eventi di sicurezza/pairing (Encryption, Secrets, Passkey)
-                # Cruciali per la tastiera HID. Li inoltriamo a entrambi in sicurezza.
-                try:
+            def _on_ble_irq(event, data):
+                if event in _CENTRAL:
                     keypad.handle_irq(event, data)
-                except Exception:
-                    pass
-                
-                if _bridge_ref[0] is not None:
-                    try:
-                        _bridge_ref[0].handle_irq(event, data)
-                    except Exception:
-                        pass
-            elif _bridge_ref[0] is not None:
-                _bridge_ref[0].handle_irq(event, data)
+                elif event in _SECURITY:
+                    try:    keypad.handle_irq(event, data)
+                    except: pass
+                    if _bridge_ref[0]:
+                        try:    _bridge_ref[0].handle_irq(event, data)
+                        except: pass
+                elif _bridge_ref[0]:
+                    _bridge_ref[0].handle_irq(event, data)
 
-        _ble.irq(_on_ble_irq)
+            _ble.irq(_on_ble_irq)
+
+            if comm_mode == "wifi":
+                from wifi.wifi_bridge import WiFiBridge
+                bridge = WiFiBridge(ble_fallback=ble_bridge)
+            else:
+                bridge = ble_bridge   # modalità BLE pura
+
+        else:
+            # wifi direct: solo IRQ central
+            mode_manager = None
+            _CENTRAL  = frozenset(range(7, 19))
+            _SECURITY = frozenset((28, 29, 30, 31))
+
+            def _on_ble_irq(event, data):
+                if event in _CENTRAL or event in _SECURITY:
+                    keypad.handle_irq(event, data)
+
+            _ble.irq(_on_ble_irq)
+            from wifi.wifi_bridge import WiFiBridge
+            bridge = WiFiBridge()
+
         keypad.start_connect()
 
+    # ---------------------------------------------------------------
+    # Matrix keypad
+    # ---------------------------------------------------------------
     else:
         from drivers.keypad_matrix import KeypadMatrix
-        from ble.ble_bridge import BLEBridge
-
-        kp_cfg = CONFIG["KEYPAD"]
+        kp = CONFIG["KEYPAD"]
         keypad = KeypadMatrix(
-            row_pins=kp_cfg["ROW_PINS"],
-            col_pins=kp_cfg["COL_PINS"],
-            primary_map=kp_cfg["PRIMARY_MAP"],
-            shift_a_map=kp_cfg.get("SHIFT_A_MAP"),
-            shift_b_map=kp_cfg.get("SHIFT_B_MAP"),
+            row_pins=kp["ROW_PINS"], col_pins=kp["COL_PINS"],
+            primary_map=kp["PRIMARY_MAP"],
+            shift_a_map=kp.get("SHIFT_A_MAP"),
+            shift_b_map=kp.get("SHIFT_B_MAP"),
         )
-        ble          = BLEBridge()
         mode_manager = None
 
-    # -----------------------------------------------------------------------
+        if comm_mode == "wifi":
+            ble_fallback = None
+            if needs_ble:
+                from ble.ble_bridge import BLEBridge
+                ble_fallback = BLEBridge()   # peripheral puro, no radio sharing
+            from wifi.wifi_bridge import WiFiBridge
+            bridge = WiFiBridge(ble_fallback=ble_fallback)
+        else:
+            from ble.ble_bridge import BLEBridge
+            bridge = BLEBridge()
+
+    # ---------------------------------------------------------------
     # Watchdog
-    # -----------------------------------------------------------------------
+    # ---------------------------------------------------------------
     wdt = (machine.WDT(timeout=CONFIG.get("WATCHDOG_TIMEOUT_MS", 60000))
            if CONFIG.get("ENABLE_WATCHDOG", False) else None)
 
-    return display, keypad, ble, mode_manager, wdt
+    return display, keypad, bridge, mode_manager, wdt

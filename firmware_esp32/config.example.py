@@ -14,52 +14,52 @@ CONFIG = {
     # ------------------------------------------------------------------
     # Selected hardware (change only these two to switch variants)
     # ------------------------------------------------------------------
-    "KEYPAD_TYPE":  "ble_hid",  # "ble_hid" | "matrix"
-    "DISPLAY_TYPE": "oled",     # "oled"    | "lcd"
+    "KEYPAD_TYPE":  "matrix",   # "matrix" | "ble_hid"
+    "DISPLAY_TYPE": "oled",     # "oled"   | "lcd"
 
     # ------------------------------------------------------------------
     # Watchdog timer (enabled by default, can be disabled for debugging)
     # ------------------------------------------------------------------
-    "ENABLE_WATCHDOG":     False,
+    "ENABLE_WATCHDOG":     True,
     "WATCHDOG_TIMEOUT_MS": 60000,
 
     # ------------------------------------------------------------------
     # Communication mode
     # ------------------------------------------------------------------
-    "COMMUNICATION_MODE": "wifi",   # "ble" | "wifi"
+    "COMMUNICATION_MODE": "ble",   # "ble" | "wifi"
 
-    # WiFi settings (used only when COMMUNICATION_MODE="wifi")
+    # WiFi settings (used when COMMUNICATION_MODE="wifi")
     "WIFI": {
-        "SOLVE_MODE":       "direct",                     # "direct" | "phone" | "auto"
-        "SSID":             "Eolo_Alex",                  # SSID of the WiFi network
-        "PASSWORD":         "63483420682238407718",       # password for the WiFi network
+        "SOLVE_MODE":       "auto",                       # "direct" | "phone" | "auto"
+        "SSID":             "YourSSID",
+        "PASSWORD":         "YourPassword",
         "RPI_URL":          "http://192.168.1.100:8000",  # host:port per direct
-        "API_TOKEN":        "",                           # Bearer token; vuoto = skip header
+        "API_TOKEN":        "",                           # Bearer token; empty = skip header
         "API_PATH":         "/solve",
-        "PHONE_URL":        "http://192.168.43.1:8765",   # IP telefono su hotspot Android
-        "PHONE_TOKEN":      "esp32-secret",               # stesso valore in app settings
+        "PHONE_URL":        "http://192.168.43.1:8765",   # smartphone IP on Android hotspot
+        "PHONE_TOKEN":      "esp32-secret",               # same value in app settings
         "PHONE_PATH":       "/solve",
         "TIMEOUT_S":        10,
-        "PING_TIMEOUT_S":   4,                            # timeout TCP per auto-detect
+        "PING_TIMEOUT_S":   4,                            # timeout TCP for auto-detecting
         "RETRY_INTERVAL_S": 10,
         "RECHECK_S":        60,                           # auto: ogni quanto ritestare direct dopo fallback
     },
 
     # ------------------------------------------------------------------
-    # BLE toward the phone (peripheral — always used)
+    # BLE toward the phone (peripheral — used when COMMUNICATION_MODE="ble")
     # ------------------------------------------------------------------
-    "BLE_NAME":            "CALC-ESP32",
-    "BLE_SERVICE_UUID":    "22337400-2cf2-4bed-8172-a832e5ba8d1f",
-    "BLE_EXPR_CHAR_UUID":  "6ee3cd41-4e4c-4bdb-809e-d45007604f4a",
-    "BLE_RESULT_CHAR_UUID":"062251c8-1b65-47a2-83a4-4f50b781a158",
-    "PHONE_MAC":           "XX:XX:XX:XX:XX:XX",
-    "BLE_PHONE_TIMEOUT_S": 30,
+    "BLE_NAME":             "CALC-ESP32",
+    "BLE_SERVICE_UUID":     "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "BLE_EXPR_CHAR_UUID":   "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "BLE_RESULT_CHAR_UUID": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "PHONE_MAC":            "XX:XX:XX:XX:XX:XX",
+    "BLE_PHONE_TIMEOUT_S":  30,
 
     # ------------------------------------------------------------------
-    # BLE HID macropad (central — used only with KEYPAD_TYPE="ble_hid")
+    # BLE HID macropad (central — used with KEYPAD_TYPE="ble_hid")
     # ------------------------------------------------------------------
-    "BLE_KP_MAC": "E0:0F:7A:C3:C9:DF",   # MAC confirmed by nRF Connect
-    "KEY_DEBOUNCE_MS": 0,                # handled by the macropad itself
+    "BLE_KP_MAC": "XX:XX:XX:XX:XX:XX",
+    "KEY_DEBOUNCE_MS": 0,
 
     # ------------------------------------------------------------------
     # OLED display (used with DISPLAY_TYPE="oled")
@@ -73,6 +73,7 @@ CONFIG = {
         # SH1106 has a different column offset (+2) in the page routine.
         "CONTROLLER": "SSD1309",
 
+        # Display resolution (in pixels)
         "WIDTH":  128,
         "HEIGHT": 64,
 
@@ -84,7 +85,7 @@ CONFIG = {
         "MOSI_PIN": 23,   # data
         "DC_PIN":   21,   # data/command
         "CS_PIN":   5,    # chip select
-        "RST_PIN":  22,   # reset (opzionale, -1 per disabilitare)
+        "RST_PIN":  22,   # reset (optional, -1 to disable)
 
         # I2C pins (used when BUS="I2C")
         "SCL_PIN":  22,

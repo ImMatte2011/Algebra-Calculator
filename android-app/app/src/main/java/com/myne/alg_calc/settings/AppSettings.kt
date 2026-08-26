@@ -18,6 +18,9 @@ class AppSettings(context: Context) {
         private const val KEY_MAC = "esp32_mac"
         private const val KEY_BASE_URL = "rpi_base_url"
         private const val KEY_API_TOKEN = "api_token"
+        private const val KEY_SERVER_ENABLED = "server_enabled"
+        private const val KEY_SERVER_PORT    = "server_port"
+        private const val KEY_ESP32_TOKEN    = "esp32_token"
 
         // Validation in companion so they can be unit-tested without a Context
         fun isValidMac(mac: String): Boolean =
@@ -28,6 +31,19 @@ class AppSettings(context: Context) {
             return Regex("^https?://[^\\s/]+(:\\d+)?/?$").matches(url)
         }
     }
+
+    var serverEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SERVER_ENABLED, false)
+        set(v) = prefs.edit().putBoolean(KEY_SERVER_ENABLED, v).apply()
+
+    var serverPort: Int
+        get() = prefs.getInt(KEY_SERVER_PORT, 8765)
+        set(v) = prefs.edit().putInt(KEY_SERVER_PORT, v).apply()
+
+    /** Shared secret: must match PHONE_TOKEN in ESP32 config.py. Empty = no auth. */
+    var esp32Token: String
+        get() = prefs.getString(KEY_ESP32_TOKEN, "") ?: ""
+        set(v) = prefs.edit().putString(KEY_ESP32_TOKEN, v).apply()
 
     var espMacAddress: String
         get() = prefs.getString(KEY_MAC, "") ?: ""

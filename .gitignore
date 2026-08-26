@@ -13,6 +13,9 @@ venv/
 !.env.example
 !.env.esp32.example
 
+# Config
+./firmware_esp32/config.py
+
 # IDE
 .vscode/
 .idea/

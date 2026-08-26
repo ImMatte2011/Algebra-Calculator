@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,11 +17,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.myne.alg_calc.ble.BleConnectionState
 import com.myne.alg_calc.data.LogEntry
@@ -52,7 +53,6 @@ fun BridgeScreen(viewModel: MainViewModel = viewModel(factory = MainViewModel.Fa
     var showSettings by remember { mutableStateOf(false) }
     var autoConnectAttempted by remember { mutableStateOf(false) }
 
-    // Once permissions are granted, attempt automatic connection only once
     LaunchedEffect(permissionsState.allPermissionsGranted) {
         if (permissionsState.allPermissionsGranted && !autoConnectAttempted) {
             autoConnectAttempted = true
@@ -77,13 +77,16 @@ fun BridgeScreen(viewModel: MainViewModel = viewModel(factory = MainViewModel.Fa
         Spacer(modifier = Modifier.height(12.dp))
 
         ActionRow(
-            bleState = uiState.bleState,
+            bleState           = uiState.bleState,
             permissionsGranted = permissionsState.allPermissionsGranted,
-            onConnect = { viewModel.connectBle() },
-            onDisconnect = { viewModel.disconnectBle() },
-            onTestRpi = { viewModel.testRpiConnection() },
-            onSettings = { showSettings = true },
-            onClearLog = { viewModel.clearLog() }
+            serverRunning      = uiState.serverRunning,
+            serverPort         = uiState.serverPort,
+            onConnect          = { viewModel.connectBle() },
+            onDisconnect       = { viewModel.disconnectBle() },
+            onTestRpi          = { viewModel.testRpiConnection() },
+            onToggleServer     = { viewModel.toggleServer() },
+            onSettings         = { showSettings = true },
+            onClearLog         = { viewModel.clearLog() }
         )
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -94,13 +97,18 @@ fun BridgeScreen(viewModel: MainViewModel = viewModel(factory = MainViewModel.Fa
 
     if (showSettings) {
         SettingsDialog(
-            initialMac = uiState.espMacAddress,
-            initialUrl = uiState.rpiBaseUrl,
-            onDismiss = { showSettings = false },
-            onSave = { mac, url ->
-                val macOk = viewModel.updateEspMac(mac)
-                val urlOk = viewModel.updateRpiBaseUrl(url)
-                macOk && urlOk
+            initialMac         = uiState.espMacAddress,
+            initialUrl         = uiState.rpiBaseUrl,
+            initialServerPort  = uiState.serverPort.toString(),
+            initialEsp32Token  = viewModel.settings.esp32Token,
+            onDismiss          = { showSettings = false },
+            onSave             = { mac, url, portStr, token ->
+                val macOk  = viewModel.updateEspMac(mac)
+                val urlOk  = viewModel.updateRpiBaseUrl(url)
+                val port   = portStr.toIntOrNull()
+                if (port != null) viewModel.updateServerPort(port)
+                viewModel.updateEsp32Token(token)
+                macOk && urlOk && port != null
             }
         )
     }
@@ -121,9 +129,7 @@ private fun PermissionRequestCard(onRequestClick: () -> Unit) {
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = onRequestClick) {
-                Text("Grant permissions")
-            }
+            Button(onClick = onRequestClick) { Text("Grant permissions") }
         }
     }
 }
@@ -132,15 +138,15 @@ private fun PermissionRequestCard(onRequestClick: () -> Unit) {
 private fun StatusRow(uiState: UiState) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         StatusBadge(
-            label = "ESP32",
-            text = bleStateLabel(uiState.bleState),
-            color = bleStateColor(uiState.bleState),
+            label    = "ESP32",
+            text     = bleStateLabel(uiState.bleState),
+            color    = bleStateColor(uiState.bleState),
             modifier = Modifier.weight(1f)
         )
         StatusBadge(
-            label = "Raspberry Pi",
-            text = rpiStatusLabel(uiState.rpiStatus),
-            color = rpiStatusColor(uiState.rpiStatus),
+            label    = "Raspberry Pi",
+            text     = rpiStatusLabel(uiState.rpiStatus),
+            color    = rpiStatusColor(uiState.rpiStatus),
             modifier = Modifier.weight(1f)
         )
     }
@@ -172,15 +178,18 @@ private fun StatusBadge(label: String, text: String, color: Color, modifier: Mod
 private fun ActionRow(
     bleState: BleConnectionState,
     permissionsGranted: Boolean,
+    serverRunning: Boolean,
+    serverPort: Int,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onTestRpi: () -> Unit,
+    onToggleServer: () -> Unit,
     onSettings: () -> Unit,
     onClearLog: () -> Unit
 ) {
     val isConnectedOrConnecting = bleState !is BleConnectionState.Disconnected &&
-            bleState !is BleConnectionState.Error &&
-            bleState !is BleConnectionState.MissingPermissions
+        bleState !is BleConnectionState.Error &&
+        bleState !is BleConnectionState.MissingPermissions
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -199,21 +208,42 @@ private fun ActionRow(
             Text("Test RPi")
         }
     }
+
     Spacer(modifier = Modifier.height(8.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Button(
+            onClick = onToggleServer,
+            colors  = ButtonDefaults.buttonColors(
+                containerColor = if (serverRunning) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.secondary
+            ),
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(if (serverRunning) "Stop server :$serverPort" else "Start ESP32 server")
+        }
         TextButton(onClick = onSettings, modifier = Modifier.weight(1f)) {
             Text("Settings")
         }
-        TextButton(onClick = onClearLog, modifier = Modifier.weight(1f)) {
-            Text("Pulisci log")
-        }
+    }
+
+    Spacer(modifier = Modifier.height(4.dp))
+
+    TextButton(
+        onClick  = onClearLog,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("Clear log")
     }
 }
 
 @Composable
 private fun LogList(entries: List<LogEntry>, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
+    val scope     = rememberCoroutineScope()
 
     LaunchedEffect(entries.size) {
         if (entries.isNotEmpty()) {
@@ -223,7 +253,10 @@ private fun LogList(entries: List<LogEntry>, modifier: Modifier = Modifier) {
 
     Card(modifier = modifier.fillMaxWidth()) {
         if (entries.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 Text("No events yet", style = MaterialTheme.typography.bodySmall)
             }
         } else {
@@ -237,12 +270,12 @@ private fun LogList(entries: List<LogEntry>, modifier: Modifier = Modifier) {
 @Composable
 private fun LogRow(entry: LogEntry) {
     val (icon, color) = when (entry.type) {
-        LogType.INFO -> "\u2139\uFE0F" to MaterialTheme.colorScheme.onSurfaceVariant
-        LogType.BLE_IN -> "\uD83D\uDCE5" to MaterialTheme.colorScheme.primary
+        LogType.INFO    -> "\u2139\uFE0F" to MaterialTheme.colorScheme.onSurfaceVariant
+        LogType.BLE_IN  -> "\uD83D\uDCE5" to MaterialTheme.colorScheme.primary
         LogType.BLE_OUT -> "\uD83D\uDCE4" to MaterialTheme.colorScheme.primary
         LogType.NET_OUT -> "\uD83D\uDCE1" to MaterialTheme.colorScheme.tertiary
-        LogType.NET_IN -> "\uD83D\uDCF6" to MaterialTheme.colorScheme.tertiary
-        LogType.ERROR -> "\u274C" to MaterialTheme.colorScheme.error
+        LogType.NET_IN  -> "\uD83D\uDCF6" to MaterialTheme.colorScheme.tertiary
+        LogType.ERROR   -> "\u274C"        to MaterialTheme.colorScheme.error
     }
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(icon, modifier = Modifier.padding(end = 6.dp))
@@ -261,46 +294,70 @@ private fun LogRow(entry: LogEntry) {
 private fun SettingsDialog(
     initialMac: String,
     initialUrl: String,
+    initialServerPort: String,
+    initialEsp32Token: String,
     onDismiss: () -> Unit,
-    onSave: (String, String) -> Boolean
+    onSave: (mac: String, url: String, serverPort: String, esp32Token: String) -> Boolean
 ) {
-    var mac by remember { mutableStateOf(initialMac) }
-    var url by remember { mutableStateOf(initialUrl) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var mac         by remember { mutableStateOf(initialMac) }
+    var url         by remember { mutableStateOf(initialUrl) }
+    var serverPort  by remember { mutableStateOf(initialServerPort) }
+    var esp32Token  by remember { mutableStateOf(initialEsp32Token) }
+    var error       by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Settings") },
-        text = {
+        text  = {
             Column {
                 OutlinedTextField(
-                    value = mac,
+                    value         = mac,
                     onValueChange = { mac = it },
-                    label = { Text("ESP32 MAC (XX:XX:XX:XX:XX:XX)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    label         = { Text("ESP32 MAC (XX:XX:XX:XX:XX:XX)") },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = url,
+                    value         = url,
                     onValueChange = { url = it },
-                    label = { Text("Raspberry Pi URL (http://IP:PORT/)" ) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    label         = { Text("Raspberry Pi URL (http://IP:PORT/)") },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value         = serverPort,
+                    onValueChange = { serverPort = it },
+                    label         = { Text("ESP32 server port (default 8765)") },
+                    singleLine    = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier      = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value         = esp32Token,
+                    onValueChange = { esp32Token = it },
+                    label         = { Text("ESP32 shared token (empty = no auth)") },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth()
                 )
                 error?.let {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                val ok = onSave(mac.trim(), url.trim())
-                if (ok) onDismiss() else error = "Invalid MAC or URL: please check the format"
-            }) {
-                Text("Save")
-            }
+                val ok = onSave(mac.trim(), url.trim(), serverPort.trim(), esp32Token.trim())
+                if (ok) onDismiss()
+                else error = "Invalid values — check MAC, URL and port"
+            }) { Text("Save") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
@@ -308,36 +365,42 @@ private fun SettingsDialog(
     )
 }
 
+// ------------------------------------------------------------------
+// Label / color helpers
+// ------------------------------------------------------------------
+
 private fun bleStateLabel(state: BleConnectionState): String = when (state) {
-    is BleConnectionState.Disconnected -> "Disconnected"
+    is BleConnectionState.Disconnected       -> "Disconnected"
     is BleConnectionState.MissingPermissions -> "Missing permissions"
-    is BleConnectionState.Connecting -> "Connecting..."
+    is BleConnectionState.Connecting         -> "Connecting..."
     is BleConnectionState.DiscoveringServices -> "Discovering services..."
-    is BleConnectionState.Ready -> "Connected"
-    is BleConnectionState.Reconnecting -> "Reconnecting ${state.attempt}/${state.maxAttempts}"
-    is BleConnectionState.Error -> "Error"
+    is BleConnectionState.Ready              -> "Connected"
+    is BleConnectionState.Reconnecting       -> "Reconnecting ${state.attempt}/${state.maxAttempts}"
+    is BleConnectionState.Error              -> "Error"
 }
 
 @Composable
 private fun bleStateColor(state: BleConnectionState): Color = when (state) {
-    is BleConnectionState.Ready -> Color(0xFF2E7D32)
-    is BleConnectionState.Connecting, is BleConnectionState.DiscoveringServices,
-    is BleConnectionState.Reconnecting -> Color(0xFFF9A825)
-    is BleConnectionState.Disconnected -> MaterialTheme.colorScheme.onSurfaceVariant
-    is BleConnectionState.MissingPermissions, is BleConnectionState.Error -> MaterialTheme.colorScheme.error
+    is BleConnectionState.Ready              -> Color(0xFF2E7D32)
+    is BleConnectionState.Connecting,
+    is BleConnectionState.DiscoveringServices,
+    is BleConnectionState.Reconnecting       -> Color(0xFFF9A825)
+    is BleConnectionState.Disconnected       -> MaterialTheme.colorScheme.onSurfaceVariant
+    is BleConnectionState.MissingPermissions,
+    is BleConnectionState.Error              -> MaterialTheme.colorScheme.error
 }
 
 private fun rpiStatusLabel(status: RpiStatus): String = when (status) {
-    RpiStatus.UNKNOWN -> "Unknown"
-    RpiStatus.CHECKING -> "Checking..."
-    RpiStatus.REACHABLE -> "Reachable"
+    RpiStatus.UNKNOWN     -> "Unknown"
+    RpiStatus.CHECKING    -> "Checking..."
+    RpiStatus.REACHABLE   -> "Reachable"
     RpiStatus.UNREACHABLE -> "Unreachable"
 }
 
 @Composable
 private fun rpiStatusColor(status: RpiStatus): Color = when (status) {
-    RpiStatus.REACHABLE -> Color(0xFF2E7D32)
-    RpiStatus.CHECKING -> Color(0xFFF9A825)
-    RpiStatus.UNKNOWN -> MaterialTheme.colorScheme.onSurfaceVariant
+    RpiStatus.REACHABLE   -> Color(0xFF2E7D32)
+    RpiStatus.CHECKING    -> Color(0xFFF9A825)
+    RpiStatus.UNKNOWN     -> MaterialTheme.colorScheme.onSurfaceVariant
     RpiStatus.UNREACHABLE -> MaterialTheme.colorScheme.error
 }

@@ -2,8 +2,8 @@ package com.myne.alg_calc
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.myne.alg_calc.ble.BleConnectionState
@@ -14,18 +14,19 @@ import com.myne.alg_calc.data.LogEntry
 import com.myne.alg_calc.data.LogType
 import com.myne.alg_calc.data.MathRequest
 import com.myne.alg_calc.network.ApiService
+import com.myne.alg_calc.server.PhoneHttpServer
 import com.myne.alg_calc.settings.AppSettings
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.io.IOException
 import java.net.SocketTimeoutException
 
-/** Raspberry Pi reachability state, separate from BLE state: they are two different connections. */
 enum class RpiStatus { UNKNOWN, CHECKING, REACHABLE, UNREACHABLE }
 
 data class UiState(
@@ -34,7 +35,9 @@ data class UiState(
     val logEntries: List<LogEntry> = emptyList(),
     val espMacAddress: String = "",
     val rpiBaseUrl: String = "",
-    val isConfigured: Boolean = false
+    val isConfigured: Boolean = false,
+    val serverRunning: Boolean = false,
+    val serverPort: Int = 8765
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -45,11 +48,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val bleManager = BleManager(application)
     private var apiService: ApiService = buildApiService()
 
+    private var phoneServer: PhoneHttpServer? = null
+    private var serverJob: Job? = null
+
     private val _uiState = MutableStateFlow(
         UiState(
             espMacAddress = settings.espMacAddress,
-            rpiBaseUrl = settings.rpiBaseUrl,
-            isConfigured = settings.isConfigured()
+            rpiBaseUrl    = settings.rpiBaseUrl,
+            isConfigured  = settings.isConfigured(),
+            serverPort    = settings.serverPort
         )
     )
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
@@ -71,17 +78,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .launchIn(viewModelScope)
     }
 
+    // ------------------------------------------------------------------
+    // ApiService
+    // ------------------------------------------------------------------
+
     private fun buildApiService(): ApiService {
-        // If the URL is empty or invalid, use a placeholder to avoid Retrofit crashing.
-        // The app will not actually make calls until the user enters a real URL.
         val url = if (AppSettings.isValidBaseUrl(settings.rpiBaseUrl)) {
             settings.rpiBaseUrl
         } else {
-            "http://localhost/" // safe fallback URL to avoid a crash
+            "http://localhost/"
         }
-
         return ApiService.create(baseUrl = url, token = settings.apiToken)
     }
+
+    // ------------------------------------------------------------------
+    // BLE
+    // ------------------------------------------------------------------
 
     fun requiredBlePermissions(): Array<String> = bleManager.requiredPermissions()
 
@@ -95,12 +107,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         bleManager.disconnect()
     }
 
+    // ------------------------------------------------------------------
+    // Settings updates
+    // ------------------------------------------------------------------
+
     fun updateEspMac(mac: String): Boolean {
         if (!AppSettings.isValidMac(mac)) return false
         settings.espMacAddress = mac
         _uiState.value = _uiState.value.copy(
             espMacAddress = mac,
-            isConfigured = settings.isConfigured()
+            isConfigured  = settings.isConfigured()
         )
         addLog(LogType.INFO, "ESP32 MAC updated: $mac")
         return true
@@ -111,8 +127,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         settings.rpiBaseUrl = url
         apiService = buildApiService()
         _uiState.value = _uiState.value.copy(
-            rpiBaseUrl = settings.rpiBaseUrl,
-            rpiStatus = RpiStatus.UNKNOWN,
+            rpiBaseUrl   = settings.rpiBaseUrl,
+            rpiStatus    = RpiStatus.UNKNOWN,
             isConfigured = settings.isConfigured()
         )
         addLog(LogType.INFO, "Raspberry Pi URL updated: ${settings.rpiBaseUrl}")
@@ -125,7 +141,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         addLog(LogType.INFO, "API token updated")
     }
 
-    /** Manual check of RPi reachability, callable from a UI button. */
+    fun updateServerPort(port: Int) {
+        settings.serverPort = port
+        _uiState.value = _uiState.value.copy(serverPort = port)
+        if (_uiState.value.serverRunning) { stopServer(); startServer() }
+    }
+
+    fun updateEsp32Token(token: String) {
+        settings.esp32Token = token
+        if (_uiState.value.serverRunning) { stopServer(); startServer() }
+    }
+
+    // ------------------------------------------------------------------
+    // RPi reachability check
+    // ------------------------------------------------------------------
+
     fun testRpiConnection() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(rpiStatus = RpiStatus.CHECKING)
@@ -140,6 +170,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ------------------------------------------------------------------
+    // ESP32 HTTP server (WiFi mode)
+    // ------------------------------------------------------------------
+
+    fun toggleServer() {
+        if (_uiState.value.serverRunning) stopServer() else startServer()
+    }
+
+    fun startServer() {
+        if (phoneServer?.isRunning == true) return
+        val server = PhoneHttpServer(
+            port       = settings.serverPort,
+            esp32Token = settings.esp32Token,
+            onSolve    = { expression, type, action ->
+                runCatching {
+                    val response = apiService.solveExpression(
+                        MathRequest(expression = expression, type = type, action = action)
+                    )
+                    if (response.error != null) throw Exception(response.error)
+                    response.result ?: throw Exception("Empty result")
+                }
+            }
+        )
+        phoneServer = server
+        serverJob = viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                serverRunning = true,
+                serverPort    = settings.serverPort
+            )
+            addLog(LogType.INFO, "ESP32 server listening on :${settings.serverPort}")
+            try {
+                server.start()
+            } catch (e: Exception) {
+                addLog(LogType.ERROR, "Server error: ${e.message}")
+            } finally {
+                _uiState.value = _uiState.value.copy(serverRunning = false)
+            }
+        }
+    }
+
+    fun stopServer() {
+        phoneServer?.stop()
+        serverJob?.cancel()
+        phoneServer = null
+        serverJob   = null
+        _uiState.value = _uiState.value.copy(serverRunning = false)
+        addLog(LogType.INFO, "ESP32 server stopped")
+    }
+
+    // ------------------------------------------------------------------
+    // Incoming BLE packet handling (BLE mode)
+    // ------------------------------------------------------------------
+
     private fun handleIncomingBlePacket(raw: String) {
         addLog(LogType.BLE_IN, "Received from ESP32: $raw")
 
@@ -151,13 +234,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        addLog(LogType.INFO, "Expression: \"${parsed.expression}\" (type: ${parsed.type}${parsed.action?.let { ", action: $it" } ?: ""})")
+        addLog(
+            LogType.INFO,
+            "Expression: \"${parsed.expression}\" (type: ${parsed.type}" +
+                "${parsed.action?.let { ", action: $it" } ?: ""})"
+        )
 
         viewModelScope.launch {
             try {
                 addLog(LogType.NET_OUT, "Sending to RPi: ${parsed.expression}")
                 val response = apiService.solveExpression(
-                    MathRequest(expression = parsed.expression, type = parsed.type, action = parsed.action)
+                    MathRequest(
+                        expression = parsed.expression,
+                        type       = parsed.type,
+                        action     = parsed.action
+                    )
                 )
                 _uiState.value = _uiState.value.copy(rpiStatus = RpiStatus.REACHABLE)
 
@@ -165,39 +256,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     addLog(LogType.ERROR, "RPi responded with error: ${response.error}")
                     bleManager.sendData("err:${response.error}")
                 } else {
-                    val result = response.result ?: ""
-                    addLog(LogType.NET_IN, "RPi response: $result")
+                    val result    = response.result ?: ""
                     val resPacket = "res:$result"
+                    addLog(LogType.NET_IN,  "RPi response: $result")
                     addLog(LogType.BLE_OUT, "Send to ESP32: $resPacket")
                     bleManager.sendData(resPacket)
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(rpiStatus = RpiStatus.UNREACHABLE)
-                val description = describeNetworkError(e)
-                addLog(LogType.ERROR, "Network error: $description")
+                addLog(LogType.ERROR, "Network error: ${describeNetworkError(e)}")
                 bleManager.sendData("err:RPiOff")
             }
         }
     }
 
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+
     private fun describeNetworkError(e: Exception): String = when (e) {
         is SocketTimeoutException -> "timeout: the RPi did not respond in time"
-        is HttpException -> "server responded with HTTP ${e.code()}"
-        is IOException -> "RPi unreachable (network/Tailscale may be down?)"
-        else -> e.message ?: e.toString()
+        is HttpException          -> "server responded with HTTP ${e.code()}"
+        is IOException            -> "RPi unreachable (network/Tailscale may be down?)"
+        else                      -> e.message ?: e.toString()
     }
 
     private fun logForBleState(state: BleConnectionState) {
         when (state) {
-            is BleConnectionState.Disconnected -> addLog(LogType.INFO, "BLE disconnected")
+            is BleConnectionState.Disconnected ->
+                addLog(LogType.INFO, "BLE disconnected")
             is BleConnectionState.MissingPermissions ->
                 addLog(LogType.ERROR, "Missing permissions: ${state.missing.joinToString()}")
-            is BleConnectionState.Connecting -> addLog(LogType.INFO, "BLE connection in progress...")
-            is BleConnectionState.DiscoveringServices -> addLog(LogType.INFO, "Discovering BLE services...")
-            is BleConnectionState.Ready -> addLog(LogType.INFO, "BLE ready")
+            is BleConnectionState.Connecting ->
+                addLog(LogType.INFO, "BLE connection in progress...")
+            is BleConnectionState.DiscoveringServices ->
+                addLog(LogType.INFO, "Discovering BLE services...")
+            is BleConnectionState.Ready ->
+                addLog(LogType.INFO, "BLE ready")
             is BleConnectionState.Reconnecting ->
                 addLog(LogType.INFO, "Reconnecting (attempt ${state.attempt}/${state.maxAttempts})")
-            is BleConnectionState.Error -> addLog(LogType.ERROR, "BLE error: ${state.message}")
+            is BleConnectionState.Error ->
+                addLog(LogType.ERROR, "BLE error: ${state.message}")
         }
     }
 
@@ -212,12 +311,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        stopServer()
         bleManager.release()
     }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                val application = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as Application
+                val application =
+                    this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as Application
                 MainViewModel(application)
             }
         }
