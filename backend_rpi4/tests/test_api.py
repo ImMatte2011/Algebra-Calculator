@@ -1,20 +1,11 @@
 import os
-import sys
-from pathlib import Path
 
 # Tests run without Caddy/Tailscale, skip token check
 os.environ.setdefault("ACCESS_MODE", "tailscale")
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
 from fastapi.testclient import TestClient
 
-try:
-    from main import app
-except ModuleNotFoundError:
-    from backend_rpi4.main import app
+from backend_rpi4.main import app
 
 
 def test_status_endpoint_returns_ok():

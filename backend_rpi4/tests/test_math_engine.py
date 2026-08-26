@@ -1,14 +1,6 @@
-﻿import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-import sympy
-from math_engine import parser, solver
-from math_engine.engine import solve_expression
-
+﻿import sympy
+from backend_rpi4.math_engine import parser, solver
+from backend_rpi4.math_engine.engine import solve_expression
 
 class TestParser:
     """Test the parser module for input parsing"""

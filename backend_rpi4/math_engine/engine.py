@@ -1,4 +1,4 @@
-﻿from math_engine import parser, solver
+﻿from . import parser, solver
 
 def solve_expression(expr_str: str, type_requested: str, action_requested: str = None, x_value=None) -> str:
     # 1. Call the parser

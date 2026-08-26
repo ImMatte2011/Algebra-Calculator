@@ -3,9 +3,9 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
-from math_engine.engine import solve_expression
-from utils.logger import info
-from utils.validators import verify_bearer_token
+from .math_engine.engine import solve_expression
+from .utils.logger import info
+from .utils.validators import verify_bearer_token
 
 app = FastAPI(title="Algebra Calculator API")
 
