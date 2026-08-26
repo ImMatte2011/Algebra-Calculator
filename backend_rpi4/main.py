@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -7,7 +8,18 @@ from .math_engine.engine import solve_expression
 from .utils.logger import info
 from .utils.validators import verify_bearer_token
 
-app = FastAPI(title="Algebra Calculator API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    info("Starting Algebra Calculator API")
+    yield
+    info("Stopping Algebra Calculator API")
+
+
+app = FastAPI(
+    title="Algebra Calculator API",
+    lifespan=lifespan,
+)
 
 
 class SolveRequest(BaseModel):
@@ -23,16 +35,6 @@ class SolveResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-
-
-@app.on_event("startup")
-def startup_event():
-    info("Starting Algebra Calculator API")
-
-
-@app.on_event("shutdown")
-def shutdown_event():
-    info("Stopping Algebra Calculator API")
 
 
 @app.post("/solve", response_model=SolveResponse)
