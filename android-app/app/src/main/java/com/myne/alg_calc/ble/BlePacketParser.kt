@@ -53,8 +53,9 @@ object BlePacketParser {
         }
 
         val type = when {
-            rawType.contains("inequality", ignoreCase = true) || rawType.contains("disequation", ignoreCase = true) -> "inequality"
-            rawType.contains("equation", ignoreCase = true) -> "equation"
+            rawType.equals("expression", ignoreCase = true) -> "expression"
+            rawType.equals("inequality", ignoreCase = true) -> "inequality"
+            rawType.equals("equation", ignoreCase = true) -> "equation"
             else -> throw BlePacketParseException("Unknown type: \"$rawType\". Raw: \"$raw\"")
         }
 

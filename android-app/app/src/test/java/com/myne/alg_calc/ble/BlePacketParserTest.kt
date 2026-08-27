@@ -80,6 +80,14 @@ class BlePacketParserTest {
         assertEquals("expand", result.action)
     }
 
+    @Test
+    fun `parse expression without action`() {
+        val result = BlePacketParser.parse("('x^2+1', 'expression', None, None)")
+        assertEquals("x^2+1", result.expression)
+        assertEquals("expression", result.type)
+        assertNull(result.action)
+    }
+
     // -------------------------------------------------------------------------
     // Expressions with legitimate parentheses (critical case documented in parser)
     // -------------------------------------------------------------------------
@@ -137,6 +145,13 @@ class BlePacketParserTest {
     fun `inequality type case insensitive`() {
         val result = BlePacketParser.parse("('x>0', 'Inequality', None, None)")
         assertEquals("inequality", result.type)
+    }
+
+    @Test
+    fun `expression type case insensitive`() {
+        val result = BlePacketParser.parse("('x^2+1', 'Expression', 'simplify', None)")
+        assertEquals("expression", result.type)
+        assertEquals("simplify", result.action)
     }
 
     // -------------------------------------------------------------------------
