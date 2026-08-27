@@ -1,9 +1,7 @@
 from fastapi import Header, HTTPException
 from starlette.status import HTTP_401_UNAUTHORIZED
-try:
-    from ..config import CONFIG
-except ImportError:
-    from config import CONFIG
+
+from ..config import CONFIG
 
 
 def verify_bearer_token(authorization: str = Header(None)):
