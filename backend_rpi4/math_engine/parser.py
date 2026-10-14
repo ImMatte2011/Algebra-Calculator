@@ -1,80 +1,97 @@
+from __future__ import annotations
+
+from typing import Any
+
 from sympy.parsing.sympy_parser import (
+    convert_xor,
+    implicit_multiplication_application,
     parse_expr,
     standard_transformations,
-    implicit_multiplication_application,
-    convert_xor
 )
 
-trans = standard_transformations + (
+TRANSFORMATIONS = standard_transformations + (
     implicit_multiplication_application,
-    convert_xor
+    convert_xor,
 )
-ops = [">=", "<=", ">", "<"]
-ops_map = {
-    ">":  "gt",
-    "<":  "lt",
+
+OPERATORS = (">=", "<=", ">", "<")
+OPS_MAP = {
+    ">": "gt",
+    "<": "lt",
     ">=": "ge",
     "<=": "le",
 }
 
+
+def _normalize_text(text: Any) -> str:
+    if text is None:
+        raise ValueError("Input cannot be empty")
+
+    normalized = str(text).replace(" ", "").strip().lower()
+    if not normalized:
+        raise ValueError("Input cannot be empty")
+
+    return normalized
+
+
+def _parse_side(raw_text: str):
+    return parse_expr(raw_text, transformations=TRANSFORMATIONS)
+
+
+def _parse_inequality(text: str):
+    for op in sorted(OPERATORS, key=len, reverse=True):
+        if op not in text:
+            continue
+
+        left_side, right_side = text.split(op, 1)
+        if not left_side or not right_side:
+            return {"error": "Incomplete inequality"}
+
+        return {
+            "type": "inequality",
+            "lhs": _parse_side(left_side),
+            "rhs": _parse_side(right_side),
+            "op": OPS_MAP[op],
+        }
+
+    return {"error": "Inequality operator not found"}
+
+
 def parse_input(text, type_requested, action_requested=None, x_value=None):
     try:
-        text = text.replace(" ", "").strip().lower()
+        normalized_text = _normalize_text(text)
 
-        # Inequality
         if type_requested == "inequality":
-            if not any(op in text for op in ops):
+            if not any(op in normalized_text for op in OPERATORS):
                 return {"error": "Inequality operator not found"}
+            return _parse_inequality(normalized_text)
 
-            for op in sorted(ops, key=len, reverse=True):
-                if op in text:
-                    sx, dx = text.split(op, 1)
-
-                    if sx.strip() == "" or dx.strip() == "":
-                        return {"error": "Incomplete inequality"}
-
-                    sx = parse_expr(sx, transformations=trans)
-                    dx = parse_expr(dx, transformations=trans)
-
-                    op_name = ops_map[op]
-
-                    return {
-                        "type": "inequality",
-                        "lhs": sx,
-                        "rhs": dx,
-                        "op": op_name
-                    }
-
-        elif type_requested == "equation":
-            if "=" in text:
-                sx, dx = text.split("=", 1)
+        if type_requested == "equation":
+            if "=" in normalized_text:
+                left_side, right_side = normalized_text.split("=", 1)
             else:
-                sx, dx = text, "0"  # If there is no '=', treat it as an equation equal to 0
+                left_side, right_side = normalized_text, "0"
 
-            if sx.strip() == "" or dx.strip() == "":
+            if not left_side or not right_side:
                 return {"error": "Incomplete equation"}
 
-            sx_parsed = parse_expr(sx, transformations=trans)
-            dx_parsed = parse_expr(dx, transformations=trans)
-
-            return {"type": "equation", "lhs": sx_parsed, "rhs": dx_parsed}
-
-        elif type_requested == "expression":
-            if "=" in text or any(op in text for op in ops):
-                return {"error": "An expression must not contain '=' or inequality signs"}
-            
-            parsed_expr = parse_expr(text, transformations=trans)
             return {
-                "type": "expression",
-                "value": parsed_expr,
-                "action": action_requested,
-                "x_value": x_value
+                "type": "equation",
+                "lhs": _parse_side(left_side),
+                "rhs": _parse_side(right_side),
             }
 
-        else:
-            return {"error": f"Invalid type requested: {type_requested}"}
-            # This should never happen because the phone bridge is expected
-            # to always send a valid type, but we handle it defensively.
+        if type_requested == "expression":
+            if "=" in normalized_text or any(op in normalized_text for op in OPERATORS):
+                return {"error": "An expression must not contain '=' or inequality signs"}
 
-    except Exception as e:
-        return {"error": str(e)}
+            return {
+                "type": "expression",
+                "value": _parse_side(normalized_text),
+                "action": action_requested,
+                "x_value": x_value,
+            }
+
+        return {"error": f"Invalid type requested: {type_requested}"}
+    except Exception as exc:
+        return {"error": str(exc)}

@@ -8,6 +8,7 @@ KEYPAD_TYPE:  "ble_hid"  → BLE HID macropad
               "matrix"   → 4x4 matrix keypad via GPIO
 DISPLAY_TYPE: "oled"     → OLED display SSD1309/SSD1306/SH1106
               "lcd"      → 16x2 I2C LCD display
+              "tft"      → 3.5" ST7796 SPI TFT display with RTP touch 
 """
 
 CONFIG = {
@@ -15,7 +16,7 @@ CONFIG = {
     # Selected hardware (change only these two to switch variants)
     # ------------------------------------------------------------------
     "KEYPAD_TYPE":  "ble_hid",  # "ble_hid" | "matrix"
-    "DISPLAY_TYPE": "oled",     # "oled"    | "lcd"
+    "DISPLAY_TYPE": "oled",     # "oled"    | "lcd"    | "tft"
 
     # ------------------------------------------------------------------
     # Watchdog timer (enabled by default, can be disabled for debugging)
@@ -79,6 +80,35 @@ CONFIG = {
         "I2C_ADDR": 0x27,
         "COLS":     16,
         "ROWS":     2,
+    },
+
+    # ------------------------------------------------------------------
+    # TFT display ST7796 (used with DISPLAY_TYPE="tft") — E32R35T board
+    # ------------------------------------------------------------------
+    "TFT": {
+        "WIDTH":  320,          # native (portrait) size
+        "HEIGHT": 480,
+        "ROTATION": 1,          # 0/2 portrait, 1/3 landscape
+        "BGR": True,            # set False if red/blue are swapped
+        "INVERT": False,        # set True if colors look negative
+        "USE_GLYPHS": True,
+        "BAUDRATE": 40_000_000,
+        "SPI_ID": 1,
+        "SCK_PIN": 14, "MOSI_PIN": 13, "MISO_PIN": 12,
+        "CS_PIN": 15, "DC_PIN": 2,
+        "RST_PIN": -1,          # tied to EN on this board (software reset used)
+        "BL_PIN": 27,
+    },
+
+    # Resistive touch XPT2046 (shares the TFT SPI bus)
+    "TOUCH": {
+        "ENABLED": True,
+        "CS_PIN": 33, "IRQ_PIN": 36,
+        "BAUDRATE": 2_000_000,
+        # Calibration: raw 12-bit values AFTER the optional axis swap.
+        # Measure with tests/test_tft.py (tap the 4 corners).
+        "SWAP_XY": True, "INVERT_X": False, "INVERT_Y": False,
+        "X_MIN": 200, "X_MAX": 3900, "Y_MIN": 200, "Y_MAX": 3900,
     },
 
     # ------------------------------------------------------------------

@@ -30,8 +30,12 @@ def get_hardware():
         display = OledDisplay()
         display.cols = CONFIG["OLED"]["WIDTH"] // 8   # 16 cols with 8 px font
         display.rows = CONFIG["OLED"]["HEIGHT"] // 8  # 8 rows with 8 px font
+    
+    elif CONFIG["DISPLAY_TYPE"] == "tft":
+        from drivers.tft_display import TftDisplay
+        display = TftDisplay()
 
-    else:
+    elif CONFIG["DISPLAY_TYPE"] == "lcd":
         from drivers.lcd_display import LCDDisplay
         lcd_cfg = CONFIG["LCD"]
         display = LCDDisplay(
@@ -41,6 +45,13 @@ def get_hardware():
         )
         display.cols = lcd_cfg["COLS"]
         display.rows = lcd_cfg["ROWS"]
+
+    if CONFIG["DISPLAY_TYPE"] == "tft" and CONFIG.get("TOUCH", {}).get("ENABLED", True):
+        from drivers.touch_xpt2046 import TouchXpt2046
+        from drivers.keypad_touch import TouchKeypadMux
+        keypad_out = TouchKeypadMux(keypad, display, TouchXpt2046(display.spi, display.width, display.height))
+    else:
+        keypad_out = keypad
 
     # -----------------------------------------------------------------------
     # Keypad + BLE
@@ -122,4 +133,4 @@ def get_hardware():
     wdt = (machine.WDT(timeout=CONFIG.get("WATCHDOG_TIMEOUT_MS", 60000))
            if CONFIG.get("ENABLE_WATCHDOG", False) else None)
 
-    return display, keypad, ble, mode_manager, wdt
+    return display, keypad_out, ble, mode_manager, wdt

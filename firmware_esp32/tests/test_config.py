@@ -46,7 +46,7 @@ check("KEYPAD_TYPE is valid", kt in ("ble_hid", "matrix"),
 
 # DISPLAY_TYPE
 dt = CONFIG.get("DISPLAY_TYPE", "")
-check("DISPLAY_TYPE is valid", dt in ("oled", "lcd"),
+check("DISPLAY_TYPE is valid", dt in ("oled", "lcd", "tft"),
       f"got '{dt}'")
 
 # BLE_KP_MAC must be present and correctly formatted if ble_hid
@@ -79,6 +79,17 @@ if dt == "lcd":
     lcd = CONFIG.get("LCD", {})
     for key in ("SCL_PIN", "SDA_PIN", "I2C_ADDR", "COLS", "ROWS"):
         check(f"LCD.{key} present", key in lcd)
+
+# TFT section if display_type == tft
+if dt == "tft":
+    tft = CONFIG.get("TFT", {})
+    for key in ("WIDTH", "HEIGHT", "ROTATION", "SCK_PIN", "MOSI_PIN",
+                "MISO_PIN", "CS_PIN", "DC_PIN", "BL_PIN"):
+        check(f"TFT.{key} present", key in tft)
+    check("TFT.ROTATION valid", tft.get("ROTATION") in (0, 1, 2, 3))
+    touch = CONFIG.get("TOUCH", {})
+    for key in ("CS_PIN", "IRQ_PIN", "X_MIN", "X_MAX", "Y_MIN", "Y_MAX"):
+        check(f"TOUCH.{key} present", key in touch)
 
 # KEYPAD section if matrix
 if kt == "matrix":
