@@ -6,9 +6,10 @@ The rest of the firmware (main.py, drivers, etc.) should not be touched.
 
 KEYPAD_TYPE:  "ble_hid"  → BLE HID macropad
               "matrix"   → 4x4 matrix keypad via GPIO
-DISPLAY_TYPE: "oled"     → OLED display SSD1309/SSD1306/SH1106
-              "lcd"      → 16x2 I2C LCD display
-              "tft"      → 3.5" ST7796 SPI TFT display with RTP touch 
+DISPLAY_TYPE: "oled"        → OLED display SSD1309/SSD1306/SH1106
+              "lcd"         → 16x2 I2C LCD display
+              "tft"         → ST7796 TFT connected to this ESP32
+              "tft_remote"  → TFT/touch on a second ESP32 over UART
 """
 
 CONFIG = {
@@ -16,7 +17,7 @@ CONFIG = {
     # Selected hardware (change only these two to switch variants)
     # ------------------------------------------------------------------
     "KEYPAD_TYPE":  "ble_hid",  # "ble_hid" | "matrix"
-    "DISPLAY_TYPE": "oled",     # "oled"    | "lcd"    | "tft"
+    "DISPLAY_TYPE": "oled",     # "oled" | "lcd" | "tft" | "tft_remote"
 
     # ------------------------------------------------------------------
     # Watchdog timer (enabled by default, can be disabled for debugging)
@@ -98,6 +99,16 @@ CONFIG = {
         "CS_PIN": 15, "DC_PIN": 2,
         "RST_PIN": -1,          # tied to EN on this board (software reset used)
         "BL_PIN": 27,
+    },
+
+    # UART link between the calculator ESP32 and the TFT ESP32.
+    # Configure the same UART ID, pins and baud rate on both boards.
+    # Connect TX to the other board's RX, RX to TX, and GND to GND.
+    "TFT_LINK": {
+        "UART_ID": 2,
+        "TX_PIN": 17,
+        "RX_PIN": 16,
+        "BAUDRATE": 921600,
     },
 
     # Resistive touch XPT2046 (shares the TFT SPI bus)

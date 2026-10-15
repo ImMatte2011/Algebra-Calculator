@@ -35,6 +35,10 @@ def get_hardware():
         from drivers.tft_display import TftDisplay
         display = TftDisplay()
 
+    elif CONFIG["DISPLAY_TYPE"] == "tft_remote":
+        from drivers.tft_remote_display import RemoteTftDisplay
+        display = RemoteTftDisplay()
+
     elif CONFIG["DISPLAY_TYPE"] == "lcd":
         from drivers.lcd_display import LCDDisplay
         lcd_cfg = CONFIG["LCD"]
@@ -45,13 +49,6 @@ def get_hardware():
         )
         display.cols = lcd_cfg["COLS"]
         display.rows = lcd_cfg["ROWS"]
-
-    if CONFIG["DISPLAY_TYPE"] == "tft" and CONFIG.get("TOUCH", {}).get("ENABLED", True):
-        from drivers.touch_xpt2046 import TouchXpt2046
-        from drivers.keypad_touch import TouchKeypadMux
-        keypad_out = TouchKeypadMux(keypad, display, TouchXpt2046(display.spi, display.width, display.height))
-    else:
-        keypad_out = keypad
 
     # -----------------------------------------------------------------------
     # Keypad + BLE
@@ -126,6 +123,20 @@ def get_hardware():
         )
         ble          = BLEBridge()
         mode_manager = None
+
+    if CONFIG["DISPLAY_TYPE"] == "tft" and CONFIG.get("TOUCH", {}).get("ENABLED", True):
+        from drivers.touch_xpt2046 import TouchXpt2046
+        from drivers.keypad_touch import TouchKeypadMux
+        keypad_out = TouchKeypadMux(
+            keypad, display,
+            TouchXpt2046(display.spi, display.width, display.height),
+        )
+    elif (CONFIG["DISPLAY_TYPE"] == "tft_remote"
+          and CONFIG.get("TOUCH", {}).get("ENABLED", True)):
+        from drivers.tft_remote_display import RemoteTouchKeypadMux
+        keypad_out = RemoteTouchKeypadMux(keypad, display.link)
+    else:
+        keypad_out = keypad
 
     # -----------------------------------------------------------------------
     # Watchdog

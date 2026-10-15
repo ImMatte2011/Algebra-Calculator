@@ -46,8 +46,15 @@ check("KEYPAD_TYPE is valid", kt in ("ble_hid", "matrix"),
 
 # DISPLAY_TYPE
 dt = CONFIG.get("DISPLAY_TYPE", "")
-check("DISPLAY_TYPE is valid", dt in ("oled", "lcd", "tft"),
+check("DISPLAY_TYPE is valid", dt in ("oled", "lcd", "tft", "tft_remote"),
       f"got '{dt}'")
+
+# The UART settings are present even when this board currently uses another
+# display, so a later switch to tft_remote does not silently use bad pins.
+link = CONFIG.get("TFT_LINK", {})
+for key in ("UART_ID", "TX_PIN", "RX_PIN", "BAUDRATE"):
+    check(f"TFT_LINK.{key} present", key in link)
+check("TFT_LINK pins are distinct", link.get("TX_PIN") != link.get("RX_PIN"))
 
 # BLE_KP_MAC must be present and correctly formatted if ble_hid
 if kt == "ble_hid":
@@ -80,8 +87,8 @@ if dt == "lcd":
     for key in ("SCL_PIN", "SDA_PIN", "I2C_ADDR", "COLS", "ROWS"):
         check(f"LCD.{key} present", key in lcd)
 
-# TFT section if display_type == tft
-if dt == "tft":
+# TFT section if display_type uses a TFT
+if dt in ("tft", "tft_remote"):
     tft = CONFIG.get("TFT", {})
     for key in ("WIDTH", "HEIGHT", "ROTATION", "SCK_PIN", "MOSI_PIN",
                 "MISO_PIN", "CS_PIN", "DC_PIN", "BL_PIN"):

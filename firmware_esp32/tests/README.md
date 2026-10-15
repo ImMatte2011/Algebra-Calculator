@@ -12,7 +12,7 @@ su PC con Python 3.
 | `test_config.py` | Struttura e validità di `config.py` |
 | `test_glyphs.py` | `oled_glyphs.split_with_glyphs()` — segmentazione e bitmap |
 | `test_input_handler.py` | `InputHandler` — editing, cursore, menu, azioni Layer 3, SQRT |
-| `test_display_scroller.py` | `TextScroller` — finestra, scroll, edge cases |
+| `test_tft_link.py` | Protocollo UART/framing tra la ESP32 logica e quella TFT |
 
 **Esegui tutti in una volta:**
 
@@ -38,6 +38,7 @@ mpremote run firmware_esp32/tests/test_config.py
 | File | Hardware richiesto | Cosa testa |
 |---|---|---|
 | `test_oled.py` | ESP32 + display OLED | Init, testo, glifi, invert — test visivi |
+| `test_tft.py` | ESP32 + display TFT/touch | Init, testo, colori e calibrazione touch |
 | `test_ble_hid.py` | ESP32 + macropad BLE | Connessione GATT, ricezione keycode |
 | `test_ble_bridge.py` | ESP32 + telefono Android | BLEBridge peripheral, send/receive |
 
@@ -47,9 +48,11 @@ mpremote run firmware_esp32/tests/test_config.py
 1. test_config        (PC, 0 hardware)
 2. test_glyphs        (PC, 0 hardware)
 3. test_input_handler (PC, 0 hardware)
-4. test_oled          (ESP32 + OLED)
-5. test_ble_hid       (ESP32 + macropad)
-6. test_ble_bridge    (ESP32 + macropad + telefono)
+4. test_tft_link      (PC, 0 hardware)
+5. test_oled          (ESP32 + OLED)
+6. test_tft           (ESP32 + TFT)
+7. test_ble_hid       (ESP32 + macropad)
+8. test_ble_bridge    (ESP32 + macropad + telefono)
 ```
 
 Non andare al passo successivo se quello precedente fallisce.

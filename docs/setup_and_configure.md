@@ -30,6 +30,9 @@ Full details: [server.md](server.md).
 4. Generate `firmware_esp32/settings.py` from `.env.esp32` — see [esp32_settings.md](esp32_settings.md).
 5. Run `main.py` on the ESP32.
 
+For an ST7796 TFT/touch connected to a second ESP32, use the UART wiring and
+two-board startup instructions in [tft_remote.md](../firmware_esp32/docs/tft_remote.md).
+
 ## Android Phone
 
 1. Create a BLE bridge that receives input from the ESP32.

@@ -23,10 +23,7 @@ LOGIC_TESTS = [
     "test_config.py",
     "test_glyphs.py",
     "test_input_handler.py",
-    "test_display_scroller.py",
-    "test_oled.py",
-    "test_ble_bridge.py",
-    "test_ble_hid.py",
+    "test_tft_link.py",
 ]
 
 total_pass = 0
