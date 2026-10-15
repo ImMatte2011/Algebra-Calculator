@@ -12,6 +12,23 @@ DISPLAY_TYPE: "oled"        → OLED display SSD1309/SSD1306/SH1106
               "tft_remote"  → TFT/touch on a second ESP32 over UART
 """
 
+try:
+    import settings
+except ImportError as exc:
+    missing_module = getattr(exc, "name", None)
+    if (missing_module != "settings"
+            and (missing_module is not None or "settings" not in str(exc))):
+        raise
+    settings = None
+
+if settings is None:
+    BLE_KP_MAC = ""
+elif not hasattr(settings, "BLE_KP_MAC"):
+    raise ValueError("Add BLE_KP_MAC to firmware_esp32/settings.py")
+else:
+    BLE_KP_MAC = settings.BLE_KP_MAC
+
+
 CONFIG = {
     # ------------------------------------------------------------------
     # Selected hardware (change only these two to switch variants)
@@ -22,7 +39,7 @@ CONFIG = {
     # ------------------------------------------------------------------
     # Watchdog timer (enabled by default, can be disabled for debugging)
     # ------------------------------------------------------------------
-    "ENABLE_WATCHDOG":     False,
+    "ENABLE_WATCHDOG":     True,
     "WATCHDOG_TIMEOUT_MS": 60000,
 
     # ------------------------------------------------------------------
@@ -38,7 +55,7 @@ CONFIG = {
     # ------------------------------------------------------------------
     # BLE HID macropad (central — used only with KEYPAD_TYPE="ble_hid")
     # ------------------------------------------------------------------
-    "BLE_KP_MAC": "E0:0F:7A:C3:C9:DF",   # MAC confirmed by nRF Connect
+    "BLE_KP_MAC": BLE_KP_MAC,
     "KEY_DEBOUNCE_MS": 0,                # handled by the macropad itself
 
     # ------------------------------------------------------------------

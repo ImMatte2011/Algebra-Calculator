@@ -8,6 +8,8 @@ class BLEBridge:
     _IRQ_CENTRAL_DISCONNECT = 2
     _IRQ_GATTS_WRITE = 3
     _IRQ_MTU_EXCHANGED = 21
+    MAX_RX_QUEUE = 4
+    MAX_RX_PAYLOAD = 256
 
     def __init__(self, callback_on_receive=None, advertise_interval=5,
                 inactivity_timeout=10, ble_instance=None, register_irq=True):
@@ -38,11 +40,19 @@ class BLEBridge:
         expr_uuid    = ubluetooth.UUID(CONFIG["BLE_EXPR_CHAR_UUID"])
         result_uuid  = ubluetooth.UUID(CONFIG["BLE_RESULT_CHAR_UUID"])
     
-        expr_char   = (expr_uuid,   ubluetooth.FLAG_WRITE | ubluetooth.FLAG_WRITE_NO_RESPONSE)
-        result_char = (result_uuid, ubluetooth.FLAG_NOTIFY | ubluetooth.FLAG_READ)
+        write_encrypted = getattr(ubluetooth, "FLAG_WRITE_ENCRYPTED", None)
+        if write_encrypted is None:
+            raise RuntimeError("BLE stack does not support encrypted GATT writes")
+        expr_char = (expr_uuid, ubluetooth.FLAG_WRITE
+                     | ubluetooth.FLAG_WRITE_NO_RESPONSE | write_encrypted)
+        read_encrypted = getattr(ubluetooth, "FLAG_READ_ENCRYPTED", None)
+        if read_encrypted is None:
+            raise RuntimeError("BLE stack does not support encrypted GATT reads")
+        result_char = (result_uuid, ubluetooth.FLAG_NOTIFY
+                       | ubluetooth.FLAG_READ | read_encrypted)
         service = (service_uuid, (expr_char, result_char))
     
-        self.ble.config(mtu=256)
+        self.ble.config(bond=True, mitm=False, le_secure=True, mtu=256)
         ((self.expr_handle, self.result_handle),) = self.ble.gatts_register_services((service,))
         self.ble.gatts_set_buffer(self.expr_handle, 256)
         self.ble.gatts_set_buffer(self.result_handle, 256)
@@ -88,13 +98,13 @@ class BLEBridge:
             self.advertising = False
 
     def get_peer_addr_str(self):
-        """Restituisce il MAC del device connesso come 'XX:XX:XX:XX:XX:XX'."""
+        """Return the connected device MAC as 'XX:XX:XX:XX:XX:XX'."""
         if self._peer_addr is None:
             return None
         return ":".join("{:02X}".format(b) for b in reversed(self._peer_addr))
 
     def disconnect(self):
-        """Forza la disconnessione del centrale corrente."""
+        """Disconnect the currently connected central device."""
         if self.phone_conn is not None:
             try:
                 self.ble.gap_disconnect(self.phone_conn)
@@ -111,6 +121,7 @@ class BLEBridge:
         self.last_advertise = 0
         self._peer_addr = None
         self.last_activity = time.time()
+        self.rx_queue.clear()
 
         if reason:
             logger.info(reason)
@@ -137,14 +148,20 @@ class BLEBridge:
                 try:
                     payload = self.ble.gatts_read(self.expr_handle)
                     if payload:
-                        self.rx_queue.append(payload)
+                        if len(payload) > self.MAX_RX_PAYLOAD:
+                            logger.warning("BLE payload exceeds %d bytes",
+                                           self.MAX_RX_PAYLOAD)
+                        elif len(self.rx_queue) >= self.MAX_RX_QUEUE:
+                            logger.warning("BLE receive queue is full; write dropped")
+                        else:
+                            self.rx_queue.append(payload)
                 except Exception as e:
                     logger.warning("BLE read error in IRQ: %s", e)
         
         elif event == self._IRQ_MTU_EXCHANGED:
             conn_handle, mtu = data
             self.mtu_negotiated_time = time.ticks_ms()
-            logger.info("[INFO] BLE MTU negoziato con Android: %d byte", mtu)
+            logger.info("BLE MTU negotiated with Android: %d bytes", mtu)
 
     def check_connection(self):
         return self.is_connected()
@@ -179,6 +196,8 @@ class BLEBridge:
 
         try:
             data = result_str.encode("utf-8")
+            if len(data) > self.MAX_RX_PAYLOAD:
+                raise ValueError("BLE result exceeds %d bytes" % self.MAX_RX_PAYLOAD)
             self.ble.gatts_write(self.result_handle, data)
             self.ble.gatts_notify(self.phone_conn, self.result_handle, data)
             self.last_activity = time.time()

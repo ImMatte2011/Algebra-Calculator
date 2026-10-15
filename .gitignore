@@ -12,6 +12,7 @@ venv/
 .env.*
 !.env.example
 !.env.esp32.example
+firmware_esp32/settings.py
 
 # IDE
 .vscode/

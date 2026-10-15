@@ -20,6 +20,8 @@ except ImportError:
     ubluetooth.FLAG_WRITE_NO_RESPONSE = 2
     ubluetooth.FLAG_NOTIFY = 4
     ubluetooth.FLAG_READ = 8
+    ubluetooth.FLAG_WRITE_ENCRYPTED = 16
+    ubluetooth.FLAG_READ_ENCRYPTED = 32
     sys.modules["ubluetooth"] = ubluetooth
 
 
@@ -35,11 +37,14 @@ class FakeBLE:
         self.buffers = []
         self.advertisements = []
         self.disconnects = []
+        self.services = None
+        self.read_data = b""
 
     def config(self, **kwargs):
         self.config_values.update(kwargs)
 
     def gatts_register_services(self, services):
+        self.services = services
         return ((1, 2),)
 
     def gatts_set_buffer(self, handle, size):
@@ -52,7 +57,7 @@ class FakeBLE:
         self.disconnects.append(conn_handle)
 
     def gatts_read(self, handle):
-        return b""
+        return self.read_data
 
 
 def test_bridge_sets_mtu_buffers_and_advertises_idempotently():
@@ -60,6 +65,12 @@ def test_bridge_sets_mtu_buffers_and_advertises_idempotently():
     bridge = BLEBridge(ble_instance=radio, register_irq=False)
 
     assert radio.config_values["mtu"] == 256
+    assert radio.config_values["bond"]
+    assert radio.config_values["le_secure"]
+    expression_flags = radio.services[0][1][0][1]
+    result_flags = radio.services[0][1][1][1]
+    assert expression_flags & ubluetooth.FLAG_WRITE_ENCRYPTED
+    assert result_flags & ubluetooth.FLAG_READ_ENCRYPTED
     assert radio.buffers == [(bridge.expr_handle, 256),
                              (bridge.result_handle, 256)]
 
@@ -85,8 +96,25 @@ def test_bridge_inactivity_requests_real_disconnect_then_readvertises():
     bridge._irq(bridge._IRQ_CENTRAL_DISCONNECT, (7, 0, b""))
     assert not bridge.is_connected()
     assert bridge.needs_advertise
+    assert bridge.rx_queue == []
     bridge.start_advertising()
     assert bridge.advertising
+
+
+def test_bridge_bounds_receive_queue_and_payload_size():
+    radio = FakeBLE()
+    bridge = BLEBridge(ble_instance=radio, register_irq=False)
+    for _ in range(bridge.MAX_RX_QUEUE):
+        radio.read_data = b"valid"
+        bridge._irq(bridge._IRQ_GATTS_WRITE, (1, bridge.expr_handle))
+    radio.read_data = b"overflow"
+    bridge._irq(bridge._IRQ_GATTS_WRITE, (1, bridge.expr_handle))
+    assert len(bridge.rx_queue) == bridge.MAX_RX_QUEUE
+
+    radio.read_data = b"x" * (bridge.MAX_RX_PAYLOAD + 1)
+    bridge.rx_queue.clear()
+    bridge._irq(bridge._IRQ_GATTS_WRITE, (1, bridge.expr_handle))
+    assert bridge.rx_queue == []
 
 
 def test_mode_manager_uses_absolute_peripheral_timeout():
@@ -170,6 +198,43 @@ def test_hid_rollover_only_enqueues_new_keycodes():
     keypad._handle_notify(bytes((1, 0, 0, 0, 0, 0, 0)))
     keypad._handle_notify(bytes((1, 0, 0, 4, 0, 0, 0)))
     assert keypad._event_queue[-1] == (4, 0)
+
+
+def test_keypad_retries_connect_after_missing_disconnect_irq(monkeypatch):
+    import drivers.keypad_ble_hid as keypad_module
+
+    class ConnectBLE:
+        def __init__(self):
+            self.connects = []
+
+        def gap_connect(self, addr_type, addr):
+            self.connects.append((addr_type, addr))
+
+    clock = [0]
+    monkeypatch.setattr(keypad_module.time, "ticks_ms",
+                        lambda: clock[0], raising=False)
+    monkeypatch.setattr(keypad_module.time, "ticks_diff",
+                        lambda now, then: now - then, raising=False)
+    monkeypatch.setattr(keypad_module, "_MAC", "AA:BB:CC:DD:EE:FF")
+    keypad = object.__new__(KeypadBleHid)
+    keypad._ble = ConnectBLE()
+    keypad._phase = "connecting"
+    keypad._connect_started_ms = 0
+    keypad._last_disconnect_ms = 0
+    keypad._reconnect_enabled = True
+    keypad._event_queue = []
+    keypad.on_state_change = None
+
+    clock[0] = keypad.CONNECT_TIMEOUT_MS + 1
+    assert keypad.update() is None
+    assert keypad._phase == "disconnected"
+
+    clock[0] += keypad.RECONNECT_DELAY_MS
+    assert keypad.update() is None
+    assert keypad._phase == "connecting"
+    assert keypad._ble.connects == [
+        (0, bytes((0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF)))
+    ]
 
 
 def test_secret_store_round_trips_and_enumerates():
@@ -269,6 +334,81 @@ def test_i2c_lcd_initializes_api_and_keeps_backlight_enabled(monkeypatch):
     assert all(value & 0x08 for _, value in lcd.i2c.writes)
 
 
+def test_lcd_render_shows_cursor_and_hides_it_for_result():
+    from drivers.lcd_display import LCDDisplay
+
+    class FakeLcd:
+        def __init__(self):
+            self.calls = []
+
+        def hide_cursor(self):
+            self.calls.append(("hide",))
+
+        def blink_cursor_on(self):
+            self.calls.append(("blink",))
+
+    display = object.__new__(LCDDisplay)
+    display.cols = 16
+    display.rows = 2
+    display.lcd = FakeLcd()
+    display.show_text = lambda text, line: None
+    display.set_cursor = lambda x, y=0: display.lcd.calls.append(("cursor", x, y))
+
+    display.render("12345", 3)
+    assert ("cursor", 3, 0) in display.lcd.calls
+    assert ("blink",) in display.lcd.calls
+
+    display.render("", 0, result="42")
+    assert display.lcd.calls[-1] == ("hide",)
+
+
+def test_oled_cursor_and_wrapped_long_result(monkeypatch):
+    machine = sys.modules.get("machine")
+    if machine is None:
+        machine = types.ModuleType("machine")
+        sys.modules["machine"] = machine
+    machine.Pin = getattr(machine, "Pin", object)
+    machine.SPI = getattr(machine, "SPI", object)
+    machine.I2C = getattr(machine, "I2C", object)
+
+    framebuf = types.ModuleType("framebuf")
+    framebuf.MONO_VLSB = 0
+    sys.modules["framebuf"] = framebuf
+    from drivers import oled_display
+
+    class FakeFrameBuffer:
+        def __init__(self):
+            self.text_calls = []
+            self.fill_rect_calls = []
+
+        def fill(self, color):
+            pass
+
+        def fill_rect(self, *args):
+            self.fill_rect_calls.append(args)
+
+        def text(self, text, x, y, color):
+            self.text_calls.append((text, x, y, color))
+
+    display = object.__new__(oled_display.OledDisplay)
+    display.width = 128
+    display.height = 64
+    display._fb = FakeFrameBuffer()
+    display.show = lambda: None
+    display._draw_glyph_bitmap = lambda bitmap, x, y: None
+
+    display.render("123", 1, status="ready")
+    assert (8, 7, 8, 1, 1) in display._fb.fill_rect_calls
+
+    display._fb.text_calls.clear()
+    result = "12345678" + "abcdefghijklmnop" * 4
+    display.render("", 0, result=result)
+    result_rows = [(text, y) for text, x, y, _ in display._fb.text_calls
+                   if y in (28, 36, 44)]
+    assert [y for _, y in result_rows] == [28, 36, 44]
+    assert "".join(text for text, _ in result_rows) == result[8:56]
+
+
 def test_main_handles_lcd_prompt_error_prefix_and_repeated_keys(monkeypatch):
     from main import CalculatorApp
 
@@ -308,11 +448,16 @@ def test_main_handles_lcd_prompt_error_prefix_and_repeated_keys(monkeypatch):
     display = FakeDisplay()
     app = CalculatorApp(display, FakeKeypad(), FakeBridge(), None, None)
     app._show_waiting_prompt()
-    assert display.lines == [("In attesa di", 0), ("  input...", 1)]
+    assert display.lines == [("Ready for input", 0), ("Enter expression", 1)]
 
     app._handle_input()
     app._handle_input()
     assert app.input_handler.expr == "11"
+
+    app.input_handler.expr = "12345678901234567890"
+    app.input_handler.cursor_pos = 18
+    app._update_display("0")
+    assert display.renders[-1][0:2] == ("12345678901234567890", 18)
 
     monkeypatch.setattr(sys.modules["main"].time, "sleep_ms",
                         lambda _: None, raising=False)

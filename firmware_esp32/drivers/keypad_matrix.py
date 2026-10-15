@@ -24,7 +24,7 @@ class KeypadMatrix(KeypadBase):
         self.shift_a_map = shift_a_map or keypad_cfg.get("SHIFT_A_MAP")
         self.shift_b_map = shift_b_map or keypad_cfg.get("SHIFT_B_MAP")
         
-        self.shift_mode = None  # Can be: None, "A", or "B"
+        self.shift_mode = None  # None, "A", or "B"
         self.debounce_ms = keypad_cfg.get("KEY_DEBOUNCE_MS", 50)
         self._last_raw = None
         self._last_time = time.ticks_ms()

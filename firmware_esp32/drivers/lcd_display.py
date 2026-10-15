@@ -64,11 +64,15 @@ class LCDDisplay(DisplayBase):
     def render(self, expr, cursor_pos, status="", result=None, is_menu=False,
                menu_top="", menu_bottom=""):
         if is_menu:
+            self.lcd.hide_cursor()
             self.show_text(menu_top, 0)
             self.show_text(menu_bottom, 1)
         elif result is not None:
+            self.lcd.hide_cursor()
             self.show_text("Result:", 0)
             self.show_text(result[:self.cols], 1)
         else:
             self.show_text(expr[:self.cols], 0)
             self.show_text(status[:self.cols], 1)
+            self.set_cursor(min(cursor_pos, self.cols - 1), 0)
+            self.lcd.blink_cursor_on()

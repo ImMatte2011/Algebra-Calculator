@@ -2,7 +2,7 @@
 keypad_ble_hid.py — BLE HID central driver for MINI-KEYBOARD.
 
 Implements KeypadBase by connecting to the macropad as a BLE central client.
-Mapping derived from hid_mapper.py for the real device (E0:0F:7A:C3:C9:DF).
+Mapping for the configured BLE HID macropad.
 
 Used when CONFIG["KEYPAD_TYPE"] == "ble_hid".
 """
@@ -86,7 +86,7 @@ def _decode(keycode, modifier):
     if keycode in _HID_CHAR:
         shifted = bool(modifier & _MOD_SHIFT)
         return _HID_CHAR[keycode][1 if shifted else 0]
-    logger.debug("HID keycode sconosciuto: 0x%02X mod=0x%02X", keycode, modifier)
+    logger.debug("Unknown HID keycode: 0x%02X mod=0x%02X", keycode, modifier)
     return None
 
 
@@ -109,6 +109,7 @@ class KeypadBleHid(KeypadBase):
     _IRQ_ENCRYPTION_UPDATE            = 28
 
     RECONNECT_DELAY_MS = 3000
+    CONNECT_TIMEOUT_MS = 10000
 
     def __init__(self, ble_instance=None, register_irq=True):
         if ble_instance:
@@ -137,6 +138,7 @@ class KeypadBleHid(KeypadBase):
         self._hid_service       = None
         self._current_char_idx  = 0
         self._last_disconnect_ms = 0
+        self._connect_started_ms = 0
         self.on_state_change    = None
         # Do not call self._connect() here — call start_connect() after
         # registering the IRQ dispatcher
@@ -154,7 +156,14 @@ class KeypadBleHid(KeypadBase):
         addr  = bytes(int(x, 16) for x in parts)
         logger.info("KeypadBleHid: connecting to %s", _MAC)
         self._phase = "connecting"
-        self._ble.gap_connect(0, addr)
+        self._connect_started_ms = time.ticks_ms()
+        try:
+            self._ble.gap_connect(0, addr)
+        except Exception as exc:
+            self._phase = "disconnected"
+            self._last_disconnect_ms = time.ticks_ms()
+            logger.warning("KeypadBleHid: connect request failed: %s", exc)
+            return
         self._notify_state("connecting")
 
     def _notify_state(self, state):
@@ -173,7 +182,7 @@ class KeypadBleHid(KeypadBase):
                 self._all_services   = []
                 self._report_handles = []
                 self._cccd_queue     = []
-                print("[INFO] BLE HID connected, starting pairing")
+                logger.info("BLE HID connected; starting pairing")
                 self._ble.gap_pair(conn)
 
             elif event == self._IRQ_PERIPHERAL_DISCONNECT:
@@ -181,7 +190,7 @@ class KeypadBleHid(KeypadBase):
                 self._phase = "disconnected"
                 self._previous_keycodes = set()
                 self._last_disconnect_ms = time.ticks_ms()
-                logger.info("KeypadBleHid: disconnesso")
+                logger.info("KeypadBleHid: disconnected")
                 self._notify_state("disconnected")
 
             elif event == self._IRQ_GATTC_SERVICE_RESULT:
@@ -230,15 +239,15 @@ class KeypadBleHid(KeypadBase):
                 encrypted = data[1] if len(data) > 1 else False
                 bonded = data[2] if len(data) > 2 else False
                 if encrypted:
-                    print("[INFO] BLE channel encrypted. Bonding:", bonded)
+                    logger.info("BLE channel encrypted; bonded=%s", bonded)
                     self._conn = conn_handle
                     self._phase = "discover_services"
                     self._ble.gattc_discover_services(conn_handle)
                 else:
-                    print("[WARNING] BLE encryption failed or was rejected")
+                    logger.warning("BLE encryption failed or was rejected")
                     self._phase = "waiting_encryption"
         except Exception as exc:
-            print("[ERROR] BLE IRQ handler failed:", exc)
+            logger.error("BLE IRQ handler failed: %s", exc)
 
     def _discover_next_desc(self):
         if self._current_char_idx >= len(self._report_handles):
@@ -287,6 +296,14 @@ class KeypadBleHid(KeypadBase):
     # KeypadBase interface
     # -----------------------------------------------------------------------
     def update(self):
+        if (self._phase == "connecting"
+                and time.ticks_diff(time.ticks_ms(), self._connect_started_ms)
+                >= self.CONNECT_TIMEOUT_MS):
+            logger.warning("KeypadBleHid: connect timed out")
+            self._phase = "disconnected"
+            self._last_disconnect_ms = time.ticks_ms()
+            return None
+
         if self._phase == "disconnected":
             elapsed = time.ticks_diff(time.ticks_ms(), self._last_disconnect_ms)
             if self._reconnect_enabled and elapsed >= self.RECONNECT_DELAY_MS:

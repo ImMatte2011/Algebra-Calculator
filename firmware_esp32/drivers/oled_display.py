@@ -267,24 +267,10 @@ class OledDisplay(DisplayBase):
     def fill_rect(self, x, y, w, h, color=1):
         self._fb.fill_rect(x, y, w, h, color)
 
-    def show_expr_and_status(self, expr_text, status_text=""):
-        """
-        Typical calculator layout:
-        row 0-1: expression (possibly on 2 rows)
-        row 7:   status / shift mode
-        """
-        self._fb.fill(0)
-        max_chars = self.width // self.CHAR_W
-        # Row 0: first N characters of the expression
-        self._fb.text(expr_text[:max_chars], 0, 0, 1)
-        # Row 1: expression overflow (if long)
-        if len(expr_text) > max_chars:
-            self._fb.text(expr_text[max_chars:max_chars*2], 0, 8, 1)
-        # Row 7 (at the bottom): status
-        if status_text:
-            self._fb.fill_rect(0, self.height - 8, self.width, 8, 0)
-            self._fb.text(status_text[:max_chars], 0, self.height - 8, 1)
-        self.show()
+    def show_expr_and_status(self, expr_text, status_text="", cursor_pos=None):
+        self.show_expr_and_status_glyphs(
+            expr_text, status_text, cursor_pos, use_glyphs=False
+        )
     
     def _draw_glyph_bitmap(self, bitmap, x, y):
         """Draws an 8x8 bitmap (bytes, one byte per row) starting at (x,y)."""
@@ -319,32 +305,66 @@ class OledDisplay(DisplayBase):
                 x += self.CHAR_W
         self.show()
  
-    def show_expr_and_status_glyphs(self, expr_text, status_text=""):
-        """Glyph variant of show_expr_and_status(). Use this to show the expression
-        when you want mathematical symbols rendered as bitmaps instead of ASCII text
-        (e.g. sqrt(, <=, >=, !=)."""
+    def show_expr_and_status_glyphs(self, expr_text, status_text="",
+                                   cursor_pos=None, use_glyphs=True):
+        """Draw expression text, optional math glyphs, and an insertion cursor."""
         self._fb.fill(0)
         max_chars = self.width // self.CHAR_W
- 
-        segments = split_with_glyphs(expr_text)
+        cursor_pos = (None if cursor_pos is None else
+                      min(max(0, cursor_pos), len(expr_text)))
+        segments = (split_with_glyphs(expr_text) if use_glyphs
+                    else [(char, "char") for char in expr_text])
         x, y = 0, 0
+        source_pos = 0
+        expression_height = self.height - self.CHAR_H
+
+        def next_line():
+            return 0, y + self.CHAR_H
+
+        def draw_cursor(cursor_x, cursor_y):
+            if cursor_y + self.CHAR_H <= expression_height:
+                self._fb.fill_rect(cursor_x, cursor_y + self.CHAR_H - 1,
+                                   self.CHAR_W, 1, 1)
+
         for content, kind in segments:
-            w = GLYPH_WIDTH if kind == "glyph" else self.CHAR_W
-            if x + w > self.width:
-                x = 0
-                y += self.CHAR_H
-                if y + self.CHAR_H > self.height - self.CHAR_H:
-                    break  # leave the last row free for the status
             if kind == "glyph":
+                width = GLYPH_WIDTH
+                if x + width > self.width:
+                    x, y = next_line()
+                if y + self.CHAR_H > expression_height:
+                    break
+                if (cursor_pos is not None
+                        and source_pos <= cursor_pos <= source_pos + len(content)):
+                    cursor_x = x if cursor_pos == source_pos else x + width
+                    cursor_y = y
+                    if cursor_x + self.CHAR_W > self.width:
+                        cursor_x, cursor_y = next_line()
+                    draw_cursor(cursor_x, cursor_y)
                 self._draw_glyph_bitmap(content, x, y)
+                x += width
+                source_pos += len(content)
             else:
-                self._fb.text(content, x, y, 1)
-            x += w
- 
+                for char in content:
+                    if x + self.CHAR_W > self.width:
+                        x, y = next_line()
+                    if y + self.CHAR_H > expression_height:
+                        break
+                    if cursor_pos == source_pos:
+                        draw_cursor(x, y)
+                    self._fb.text(char, x, y, 1)
+                    x += self.CHAR_W
+                    source_pos += 1
+                if y + self.CHAR_H > expression_height:
+                    break
+
+        if cursor_pos == source_pos:
+            if x + self.CHAR_W > self.width:
+                x, y = next_line()
+            draw_cursor(x, y)
+
         if status_text:
             self._fb.fill_rect(0, self.height - 8, self.width, 8, 0)
             self._fb.text(status_text[:max_chars], 0, self.height - 8, 1)
- 
         self.show()
 
     def invert(self, invert=True):
@@ -369,11 +389,16 @@ class OledDisplay(DisplayBase):
             self._fb.fill(0)
             self._fb.text("Result:", 0, 0, 1)
             self.show_text_large(result[:8], y=12)
-            self._fb.text(result[8:], 0, 28, 1)
+            max_chars = self.width // self.CHAR_W
+            remainder = result[8:8 + 3 * max_chars]
+            for row in range(3):
+                start = row * max_chars
+                self._fb.text(remainder[start:start + max_chars],
+                              0, 28 + row * self.CHAR_H, 1)
             self._fb.text(status, 0, 56, 1)
             self.show()
         else:
             if CONFIG["OLED"].get("USE_GLYPHS", True):
-                self.show_expr_and_status_glyphs(expr, status)
+                self.show_expr_and_status_glyphs(expr, status, cursor_pos)
             else:
-                self.show_expr_and_status(expr, status)
+                self.show_expr_and_status(expr, status, cursor_pos)

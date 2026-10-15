@@ -19,7 +19,6 @@ class I2cLcd(LcdApi):
         self.hal_write_command(0x0C | 0x00)
         self.hal_write_command(0x06)
         self.clear()
-        self.hal_write_command(0x0C | 0x04)
 
     def hal_write_init_nibble(self, nibble):
         byte = (nibble & 0xF0) | 0x0C

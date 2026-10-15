@@ -1,6 +1,6 @@
 # BLE Macropad Mapping — MINI-KEYBOARD
 
-Definitive reference for configuring the macropad in the manufacturer's EXE tool. Confirmed MAC: `E0:0F:7A:C3:C9:DF`.
+Definitive reference for configuring the macropad in the manufacturer's EXE tool. Set its address privately in `BLE_KP_MAC` in `.env.esp32`; do not store device addresses in public firmware files.
 
 Mapping obtained and verified with `scripts/hid_mapper.py` on real hardware (see that file for how to re-run the scan if the macropad is reconfigured).
 

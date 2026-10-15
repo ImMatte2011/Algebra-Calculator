@@ -11,8 +11,19 @@ API_URL = "http://192.168.1.100:8000/solve"
 WIFI_SSID = "YourSSID"
 WIFI_PASSWORD = "YourWifiPassword"
 BLE_NAME = "CALC-ESP32"
+BLE_KP_MAC = "AA:BB:CC:DD:EE:FF"
 ...
 ```
+
+Set `BLE_KP_MAC` in `.env.esp32` to the address of the HID keypad. It is loaded
+from the generated, git-ignored `settings.py` rather than stored in public
+firmware configuration.
+
+The phone-facing BLE expression characteristic requires an encrypted,
+bonded connection. The ESP32 stores pairing secrets in
+`/ble_secrets.json`; deleting that file clears saved bonds and requires pairing
+again. Pairing uses encrypted Just Works because the ESP32 has no passkey
+input/display for MITM authentication.
 
 ## How to Use It
 

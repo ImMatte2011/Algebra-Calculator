@@ -18,8 +18,8 @@ def get_hardware():
     Returns a 5-tuple:
         display      — configured display driver, with .cols/.rows attributes
         keypad       — configured keypad driver
-        ble          — BLEBridge instance (matrix) or None (ble_hid, lazy)
-        mode_manager — BleModeManager instance or None (always None here)
+        ble          — configured BLEBridge instance
+        mode_manager — BleModeManager for ble_hid, otherwise None
         wdt          — machine.WDT instance or None if watchdog is disabled
     """
 
@@ -59,6 +59,16 @@ def get_hardware():
         from drivers.keypad_ble_hid import KeypadBleHid
         from ble.ble_bridge import BLEBridge
         from ble.ble_mode_manager import BleModeManager
+
+        mac = CONFIG.get("BLE_KP_MAC", "")
+        parts = mac.split(":")
+        if (len(parts) != 6
+                or any(len(part) != 2 or any(
+                    char not in "0123456789abcdefABCDEF" for char in part
+                ) for part in parts)):
+            raise ValueError(
+                "Set a valid BLE_KP_MAC in firmware_esp32/settings.py"
+            )
         
         # Single BLE radio shared by keypad and the BLEBridge.
         _ble = ubluetooth.BLE()
@@ -67,20 +77,11 @@ def get_hardware():
 
         keypad = KeypadBleHid(ble_instance=_ble, register_irq=False)
 
-        # Expose the raw radio so
-        #  CalculatorApp can create BLEBridge lazily.
-        keypad.ble_radio = _ble
-
-        # Mutable slot: CalculatorApp writes self.ble here after lazy init so
-        # the IRQ router below can forward peripheral-role events to the bridge.
         ble = BLEBridge(
             ble_instance=_ble,
             register_irq=False
         )
         secret_store = BLESecretStore()
-
-        _bridge_ref = [ble]
-        keypad._bridge_ref = _bridge_ref
 
         mode_manager = BleModeManager(
             ble_bridge=ble,
@@ -99,10 +100,9 @@ def get_hardware():
                 keypad.handle_irq(event, data)
             elif event in (28, 31):
                 keypad.handle_irq(event, data)
-                if _bridge_ref[0] is not None:
-                    _bridge_ref[0].handle_irq(event, data)
-            elif _bridge_ref[0] is not None:
-                _bridge_ref[0].handle_irq(event, data)
+                ble.handle_irq(event, data)
+            else:
+                ble.handle_irq(event, data)
 
         _ble.irq(_on_ble_irq)
         keypad.start_connect()

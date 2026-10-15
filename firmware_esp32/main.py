@@ -7,6 +7,7 @@ the expression-editing → BLE-send → result-display cycle.
 
 import time
 import sys
+import machine
 from config import CONFIG
 from core.input_handler import InputHandler
 from drivers.display_scroller import TextScroller
@@ -30,10 +31,9 @@ class CalculatorApp:
         self._pending_result = [None]
 
         # Input-loop state.
-        self.shift_mode      = None
         self._last_countdown = -1
 
-        # Waiting-prompt state: show "In attesa di input..." until first keypress.
+        # Keep the startup prompt visible until the first keypress.
         self._kp_was_ready   = False
         self._awaiting_input = False
         self._first_input    = False
@@ -57,8 +57,8 @@ class CalculatorApp:
 
     def _status_line(self):
         if CONFIG["KEYPAD_TYPE"] == "matrix":
-            if self.shift_mode == "A": return "[SH-A]"
-            if self.shift_mode == "B": return "[SH-B]"
+            if getattr(self.keypad, "shift_mode", None) == "A": return "[SH-A]"
+            if getattr(self.keypad, "shift_mode", None) == "B": return "[SH-B]"
             return ""
         return "KP:OK" if self.keypad.is_ready() else "KP:..."
 
@@ -67,9 +67,9 @@ class CalculatorApp:
         if rows <= 0:
             return
         first_row = max(0, (rows - 2) // 2)
-        self.display.show_text("In attesa di", first_row)
+        self.display.show_text("Ready for input", first_row)
         if first_row + 1 < rows:
-            self.display.show_text("  input...", first_row + 1)
+            self.display.show_text("Enter expression", first_row + 1)
 
     # -----------------------------------------------------------------------
     # run(): initial UI setup + main loop
@@ -81,19 +81,14 @@ class CalculatorApp:
 
         if CONFIG["KEYPAD_TYPE"] != "ble_hid":
             if hasattr(self.ble, 'start_advertising'):
-                if not getattr(self.ble, 'async_mode', False):
-                    self.ble.start_advertising(force=True)
+                self.ble.start_advertising(force=True)
         if CONFIG["KEYPAD_TYPE"] == "matrix":
             self._kp_was_ready   = True
             self._awaiting_input = True
             self.display.clear()
             self._show_waiting_prompt()
 
-        if getattr(self.ble, 'async_mode', False):
-            import uasyncio
-            uasyncio.run(self._run_async())
-        else:
-            self._run_sync()
+        self._run_sync()
 
     def _run_sync(self):
         while True:
@@ -104,19 +99,6 @@ class CalculatorApp:
             time.sleep_ms(20)
             self._handle_input()
 
-    async def _run_async(self):
-        import uasyncio
-        uasyncio.create_task(self.ble.run_background())
-        # Breve attesa per permettere al background di avviarsi (WiFi connect, ping)
-        await uasyncio.sleep_ms(200)
-        while True:
-            if self.wdt: self.wdt.feed()
-            self._poll_network()
-            if self._handle_pending_result():
-                await uasyncio.sleep_ms(0)
-                continue
-            self._handle_input()
-            await uasyncio.sleep_ms(20)
     # -----------------------------------------------------------------------
     # _poll_network(): BLE polling, re-advertising, countdown display
     # -----------------------------------------------------------------------
@@ -124,20 +106,8 @@ class CalculatorApp:
         if self.ble is not None:
             self.ble.poll()
 
-        # WiFiBridge ha delegato un pacchetto a BLE → main.py gestisce il role-switch
-        if hasattr(self.ble, '_ble_queue') and self.ble._ble_queue:
-            pkt = self.ble._ble_queue.pop(0)
-            if self.mode_manager is not None:
-                self._last_countdown = CONFIG.get("BLE_PHONE_TIMEOUT_S", 30)
-                self.mode_manager.switch_to_peripheral(pkt)
-                self._render(self.input_handler.expr, self.input_handler.cursor_pos,
-                            status="App...{}s".format(self._last_countdown))
-            elif hasattr(self.ble, '_ble') and self.ble._ble is not None:
-                self.ble._ble.send_result(str(pkt))
-
         if CONFIG["KEYPAD_TYPE"] == "matrix":
-            if (not getattr(self.ble, 'async_mode', False)
-                    and self.ble.needs_advertise):
+            if self.ble.needs_advertise:
                 self.ble.start_advertising()
         else:
             if not self._kp_was_ready and self.keypad.is_ready():
@@ -152,7 +122,7 @@ class CalculatorApp:
                     if poll_info.get("timeout"):
                         self._render(self.input_handler.expr,
                                     self.input_handler.cursor_pos,
-                                    status="Timeout:no phone")
+                                    status="Phone timeout")
                         time.sleep_ms(2000)
                         if self.wdt: self.wdt.feed()
                         self._last_countdown = -1
@@ -195,7 +165,7 @@ class CalculatorApp:
             time.sleep_ms(2000)
             if self.wdt: self.wdt.feed()
         else:
-            # Fallback per qualsiasi altro formato di testo/risultato grezzo
+            # Display unrecognized message formats as raw results.
             self.input_handler.store_local_result(msg)
             self._render(self.input_handler.expr, self.input_handler.cursor_pos,
                          status=self._status_line(), result=msg)
@@ -222,17 +192,11 @@ class CalculatorApp:
             return
 
         # Shift-layer toggles (matrix mode only).
-        if CONFIG["KEYPAD_TYPE"] == "matrix":
-            if key == KeypadAction.SHIFT_A:
-                self.shift_mode = None if self.shift_mode == "A" else "A"
-                self._render(self.input_handler.expr, self.input_handler.cursor_pos,
-                             status=self._status_line())
-                return
-            if key == KeypadAction.SHIFT_B:
-                self.shift_mode = None if self.shift_mode == "B" else "B"
-                self._render(self.input_handler.expr, self.input_handler.cursor_pos,
-                             status=self._status_line())
-                return
+        if CONFIG["KEYPAD_TYPE"] == "matrix" and key in (
+                KeypadAction.SHIFT_A, KeypadAction.SHIFT_B):
+            self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                         status=self._status_line())
+            return
 
         result = self.input_handler.process_key(key)
 
@@ -256,20 +220,9 @@ class CalculatorApp:
             self._render(self.input_handler.expr, self.input_handler.cursor_pos,
                         status=self._status_line())
             self.keypad.reset_shift()
-            self.shift_mode = None
             return
 
-        is_wifi = getattr(self.ble, 'async_mode', False)
-
-        if is_wifi:
-            # Non-bloccante: send_result() accoda, background task processa
-            self.ble.send_result(str(result))
-            use_direct = getattr(self.ble, '_use_direct', True)
-            status = "WiFi→RPi..." if use_direct else "App (BLE)..."
-            self._render(self.input_handler.expr, self.input_handler.cursor_pos,
-                        status=status)
-
-        elif CONFIG["KEYPAD_TYPE"] == "ble_hid" and self.mode_manager is not None:
+        if CONFIG["KEYPAD_TYPE"] == "ble_hid" and self.mode_manager is not None:
             self._last_countdown = CONFIG.get("BLE_PHONE_TIMEOUT_S", 30)
             self.mode_manager.switch_to_peripheral(result)
             self._render(self.input_handler.expr, self.input_handler.cursor_pos,
@@ -289,7 +242,6 @@ class CalculatorApp:
                             status=self._status_line())
 
         self.keypad.reset_shift()
-        self.shift_mode = None
 
     # -----------------------------------------------------------------------
     # _handle_menu(): route a menu result dict to the correct display update
@@ -301,7 +253,6 @@ class CalculatorApp:
 
         elif result.get("menu_open"):
             self.keypad.reset_shift()
-            self.shift_mode = None
             pt, pb = self.input_handler.get_menu_prompt()
             self._render("", 0, is_menu=True, menu_top=pt, menu_bottom=pb)
 
@@ -312,7 +263,6 @@ class CalculatorApp:
 
         elif result.get("menu_cancelled"):
             self.keypad.reset_shift()
-            self.shift_mode = None
             self._render(self.input_handler.expr, self.input_handler.cursor_pos,
                          status=self._status_line())
 
@@ -337,10 +287,17 @@ class CalculatorApp:
             self._awaiting_input = False
 
         if not self._awaiting_input:
-            visible = self.scroller.update(self.input_handler.expr,
-                                           self.input_handler.cursor_pos)
-            self._render(visible, self.input_handler.cursor_pos,
-                         status=self._status_line())
+            expression = self.input_handler.expr
+            cursor_pos = self.input_handler.cursor_pos
+            if CONFIG["DISPLAY_TYPE"] == "oled":
+                visible = expression
+            else:
+                visible = self.scroller.update(expression, cursor_pos)
+                cursor_pos = max(0, min(
+                    cursor_pos - self.scroller.window_start,
+                    len(visible),
+                ))
+            self._render(visible, cursor_pos, status=self._status_line())
 
 
 if __name__ == "__main__":
@@ -349,23 +306,9 @@ if __name__ == "__main__":
     try:
         app.run()
     except KeyboardInterrupt:
-            print("\n[WAKE] User interrupt detected.")
-
+        print("\n[INFO] User interrupt detected.")
+        hw_ble.ble.active(False)
     except Exception as e:
-        print("\n[ERROR]")
+        print("\n[ERROR] Unhandled firmware exception; restarting.")
         sys.print_exception(e)
-        time.sleep_ms(2000)
-
-    finally:
-        if hw_ble is not None:
-            print("[CLEANUP] Forced NimBLE stack deactivation...")
-            try:
-                import ubluetooth
-                ubluetooth.BLE().active(False)
-
-                import time
-                time.sleep_ms(300)
- 
-                print("[CLEANUP] Stack powered off. Safe REPL.")
-            except:
-                pass
+        machine.reset()

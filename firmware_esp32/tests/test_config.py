@@ -59,10 +59,14 @@ check("TFT_LINK pins are distinct", link.get("TX_PIN") != link.get("RX_PIN"))
 # BLE_KP_MAC must be present and correctly formatted if ble_hid
 if kt == "ble_hid":
     mac = CONFIG.get("BLE_KP_MAC", "")
-    import re
-    check("BLE_KP_MAC format XX:XX:XX:XX:XX:XX",
-          bool(re.match(r'^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$', mac)),
-          f"got '{mac}'")
+    if mac:
+        import re
+        check("BLE_KP_MAC format XX:XX:XX:XX:XX:XX",
+              bool(re.match(r'^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$', mac)),
+              f"got '{mac}'")
+    else:
+        check("BLE_KP_MAC may be unset before private settings are deployed",
+              not mac)
 
 # OLED section if display_type == oled
 if dt == "oled":
@@ -105,6 +109,18 @@ if kt == "matrix":
         check(f"KEYPAD.{key} present", key in kp)
     check("KEYPAD.ROW_PINS len == 4", len(kp.get("ROW_PINS", [])) == 4)
     check("KEYPAD.COL_PINS len == 4", len(kp.get("COL_PINS", [])) == 4)
+    if dt == "oled" and CONFIG.get("OLED", {}).get("BUS") == "SPI":
+        keypad_pins = set(kp.get("ROW_PINS", []) + kp.get("COL_PINS", []))
+        oled = CONFIG["OLED"]
+        oled_pins = {
+            oled[key] for key in ("SCK_PIN", "MOSI_PIN", "DC_PIN", "CS_PIN")
+            if key in oled
+        }
+        if oled.get("RST_PIN", -1) >= 0:
+            oled_pins.add(oled["RST_PIN"])
+        check("matrix keypad pins do not overlap OLED SPI pins",
+              not keypad_pins.intersection(oled_pins),
+              f"conflicts: {sorted(keypad_pins.intersection(oled_pins))}")
 
 print(f"\n  {_pass} passed, {_fail} failed")
 sys.exit(0 if _fail == 0 else 1)

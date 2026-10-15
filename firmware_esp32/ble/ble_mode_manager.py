@@ -15,7 +15,6 @@ Flow:
 Estimated latency per switch: 1-3 seconds.
 """
 
-import ubluetooth
 import time
 from utils import logger
 from config import CONFIG
@@ -123,12 +122,12 @@ class BleModeManager:
 
     def poll(self):
         """
-        Chiamato a ogni ciclo del main loop in modalità peripheral.
+        Called on every main-loop iteration while in peripheral mode.
 
-        Ritorni possibili:
-        None                  → non siamo in modalità peripheral
-        {"countdown": N}          → in attesa del telefono, N secondi al timeout
-        {"timeout": True}         → timeout scaduto, siamo tornati a central
+        Possible returns:
+        None                  → not in peripheral mode
+        {"countdown": N}      → waiting for the phone, N seconds remain
+        {"timeout": True}     → timeout expired; returned to central mode
         """
         if self._mode != self.MODE_PERIPHERAL:
             return None
@@ -145,13 +144,13 @@ class BleModeManager:
 
         connected = self._bridge.is_connected()
 
-        # --- MAC Whitelist: controlla alla prima connessione ---
+        # Check the optional phone allowlist on first connection.
         if connected and not self._mac_checked:
             self._mac_checked = True
             allowed = CONFIG.get("PHONE_MAC", "").upper().strip()
             peer    = self._bridge.get_peer_addr_str()
             if allowed and allowed != "XX:XX:XX:XX:XX:XX" and peer != allowed:
-                logger.warning("BleModeManager: MAC %s non in whitelist, disconnessione", peer)
+                logger.warning("BleModeManager: MAC %s not in allowlist; disconnecting", peer)
                 self._bridge.disconnect()
                 self._mac_checked = False   # reset per il prossimo tentativo
                 return {"countdown": remaining}
@@ -163,10 +162,10 @@ class BleModeManager:
 
             mtu_time = getattr(self._bridge, "mtu_negotiated_time", 0)
 
-            # Condizione 1: MTU negoziato ed è passato un ritardo di 2000 ms da QUEL momento
+            # Wait 2 seconds after MTU negotiation before sending.
             ready_after_mtu = (mtu_time > 0) and (time.ticks_diff(time.ticks_ms(), mtu_time) >= 2000)
 
-            # Condizione 2 (Fallback): MTU non negoziato ma passati 4000 ms dalla connessione
+            # Fallback: wait 4 seconds from connection if MTU was not negotiated.
             fallback_no_mtu = (mtu_time == 0) and (time.ticks_diff(time.ticks_ms(), self._connected_at) >= 4000)
 
             if self._pending_packet is not None and (ready_after_mtu or fallback_no_mtu):
@@ -174,10 +173,10 @@ class BleModeManager:
                 try:
                     self._bridge.send_result(packet_str)
                     reason = "2s post-MTU" if ready_after_mtu else "fallback 4s"
-                    logger.info("BleModeManager: pacchetto inviato al telefono (%s)", reason)
+                    logger.info("BleModeManager: packet sent to phone (%s)", reason)
                     self._pending_packet = None
                 except Exception as e:
-                    logger.warning("BleModeManager: errore invio pacchetto: %s", e)
+                    logger.warning("BleModeManager: packet send failed: %s", e)
         else:
             self._connected_at = 0
             if self._bridge.needs_advertise:

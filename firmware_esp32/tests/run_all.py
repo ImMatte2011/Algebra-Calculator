@@ -26,6 +26,10 @@ LOGIC_TESTS = [
     "test_tft_link.py",
 ]
 
+HARDWARE_TESTS = ("test_oled.py", "test_ble_bridge.py", "test_ble_hid.py")
+if any(test in LOGIC_TESTS for test in HARDWARE_TESTS):
+    raise RuntimeError("Hardware-dependent tests must not run in the logic suite")
+
 total_pass = 0
 total_fail = 0
 

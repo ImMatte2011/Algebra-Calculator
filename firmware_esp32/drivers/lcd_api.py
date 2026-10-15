@@ -23,9 +23,6 @@ class LcdApi:
     def blink_cursor_on(self):
         self.hal_write_command(0x0C | 0x01)
 
-    def blink_cursor_off(self):
-        self.hal_write_command(0x0C | 0x00)
-
     def putstr(self, string):
         for char in string:
             if char == '\n':

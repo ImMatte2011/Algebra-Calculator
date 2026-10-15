@@ -81,7 +81,7 @@ while not bridge.is_connected():
 
 check(f"phone connected within {CONN_TIMEOUT_S}s", True)
 
-print("  Attesa di 3s per permettere ad Android di abilitare le notifiche...")
+print("  Waiting 3 seconds for Android to enable notifications...")
 time.sleep_ms(3000)
 
 # Send test packet
