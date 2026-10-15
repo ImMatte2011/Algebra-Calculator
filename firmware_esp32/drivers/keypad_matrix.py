@@ -25,10 +25,10 @@ class KeypadMatrix(KeypadBase):
         self.shift_b_map = shift_b_map or keypad_cfg.get("SHIFT_B_MAP")
         
         self.shift_mode = None  # Can be: None, "A", or "B"
-        self.debounce_ms = CONFIG.get("KEY_DEBOUNCE_MS", 50)
+        self.debounce_ms = keypad_cfg.get("KEY_DEBOUNCE_MS", 50)
         self._last_raw = None
         self._last_time = time.ticks_ms()
-        self._stable_key = None
+        self._fired = False
 
         for row in self.rows:
             row.value(1)
@@ -48,20 +48,14 @@ class KeypadMatrix(KeypadBase):
         raw_key = self._scan_raw()
         current_time = time.ticks_ms()
 
-        if raw_key == self._last_raw:
-            if raw_key is not None and self._stable_key is None:
-                elapsed = time.ticks_diff(current_time, self._last_time)
-                if elapsed >= self.debounce_ms:
-                    self._stable_key = raw_key
-        else:
+        if raw_key != self._last_raw:
             self._last_raw = raw_key
             self._last_time = current_time
-            self._stable_key = None
-
-        if self._stable_key is not None:
-            key = self._stable_key
-            self._stable_key = None
-            return self._translate_key(key)
+            self._fired = False
+        elif (raw_key is not None and not self._fired
+              and time.ticks_diff(current_time, self._last_time) >= self.debounce_ms):
+            self._fired = True
+            return self._translate_key(raw_key)
 
         return None
 

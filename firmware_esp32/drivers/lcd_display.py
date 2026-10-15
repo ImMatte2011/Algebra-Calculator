@@ -33,13 +33,6 @@ class LCDDisplay(DisplayBase):
         self.i2c = I2C(i2c_id, scl=Pin(scl_pin), sda=Pin(sda_pin))
         self.lcd = I2cLcd(self.i2c, i2c_addr, rows, cols)
         
-        # --- SAFETY ADDITION FOR THE BASE API ---
-        # Inject the missing names directly into the created instance
-        # so lcd_api.py (line 45) does not complain about 'num_columns'
-        self.lcd.num_columns = cols
-        self.lcd.num_lines = rows
-        # -----------------------------------------------
-        
         self.clear()
 
     def clear(self):

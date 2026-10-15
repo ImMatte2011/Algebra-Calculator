@@ -30,9 +30,7 @@ class CalculatorApp:
         self._pending_result = [None]
 
         # Input-loop state.
-        self.last_key        = None
         self.shift_mode      = None
-        self._last_ble_adv   = 0
         self._last_countdown = -1
 
         # Waiting-prompt state: show "In attesa di input..." until first keypress.
@@ -64,6 +62,15 @@ class CalculatorApp:
             return ""
         return "KP:OK" if self.keypad.is_ready() else "KP:..."
 
+    def _show_waiting_prompt(self):
+        rows = getattr(self.display, "rows", 2)
+        if rows <= 0:
+            return
+        first_row = max(0, (rows - 2) // 2)
+        self.display.show_text("In attesa di", first_row)
+        if first_row + 1 < rows:
+            self.display.show_text("  input...", first_row + 1)
+
     # -----------------------------------------------------------------------
     # run(): initial UI setup + main loop
     # -----------------------------------------------------------------------
@@ -76,14 +83,11 @@ class CalculatorApp:
             if hasattr(self.ble, 'start_advertising'):
                 if not getattr(self.ble, 'async_mode', False):
                     self.ble.start_advertising(force=True)
-        self._last_ble_adv = time.time()
-
         if CONFIG["KEYPAD_TYPE"] == "matrix":
             self._kp_was_ready   = True
             self._awaiting_input = True
             self.display.clear()
-            self.display.show_text("In attesa di", 3)
-            self.display.show_text("  input...", 4)
+            self._show_waiting_prompt()
 
         if getattr(self.ble, 'async_mode', False):
             import uasyncio
@@ -132,18 +136,15 @@ class CalculatorApp:
                 self.ble._ble.send_result(str(pkt))
 
         if CONFIG["KEYPAD_TYPE"] == "matrix":
-            if not getattr(self.ble, 'async_mode', False) and not self.ble.is_connected():
-                now = time.time()
-                if now - self._last_ble_adv > 5:
-                    self.ble.start_advertising()
-                    self._last_ble_adv = now
+            if (not getattr(self.ble, 'async_mode', False)
+                    and self.ble.needs_advertise):
+                self.ble.start_advertising()
         else:
             if not self._kp_was_ready and self.keypad.is_ready():
                 self._kp_was_ready   = True
                 self._awaiting_input = True
                 self.display.clear()
-                self.display.show_text("In attesa di", 3)
-                self.display.show_text("  input...", 4)
+                self._show_waiting_prompt()
 
             if self.mode_manager is not None:
                 poll_info = self.mode_manager.poll()
@@ -188,9 +189,9 @@ class CalculatorApp:
                          status=self._status_line(), result=result_text)
             time.sleep_ms(2000)
             if self.wdt: self.wdt.feed()
-        elif msg.startswith("error:"):
+        elif msg.startswith("err:") or msg.startswith("error:"):
             self._render(self.input_handler.expr, self.input_handler.cursor_pos,
-                         status="ERROR: " + msg[6:])
+                         status="ERROR: " + msg.split(":", 1)[1])
             time.sleep_ms(2000)
             if self.wdt: self.wdt.feed()
         else:
@@ -217,11 +218,8 @@ class CalculatorApp:
     # -----------------------------------------------------------------------
     def _handle_input(self):
         key = self.keypad.update()
-        if key is None or key == self.last_key:
-            self.last_key = key
+        if key is None:
             return
-
-        self.last_key = key
 
         # Shift-layer toggles (matrix mode only).
         if CONFIG["KEYPAD_TYPE"] == "matrix":
@@ -297,7 +295,11 @@ class CalculatorApp:
     # _handle_menu(): route a menu result dict to the correct display update
     # -----------------------------------------------------------------------
     def _handle_menu(self, result):
-        if result.get("menu_open"):
+        if result.get("input_error") == "expression_too_long":
+            self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                         status="Expression too long")
+
+        elif result.get("menu_open"):
             self.keypad.reset_shift()
             self.shift_mode = None
             pt, pb = self.input_handler.get_menu_prompt()

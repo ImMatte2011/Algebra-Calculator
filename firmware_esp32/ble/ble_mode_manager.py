@@ -67,13 +67,14 @@ class BleModeManager:
         self._pending_packet = packet
         self._connected_at   = 0
         self._mode = self.MODE_SWITCHING
+        self._keypad.set_reconnect_enabled(False)
         self._notify("switching_to_phone")
         logger.info("BleModeManager: switch → peripheral")
 
         # 1. Disconnect the macropad
         try:
-            if hasattr(self._keypad, '_conn_handle') and self._keypad._conn_handle is not None:
-                self._bridge.ble.gap_disconnect(self._keypad._conn_handle)
+            if self._keypad._conn is not None:
+                self._bridge.ble.gap_disconnect(self._keypad._conn)
                 logger.info("BleModeManager: macropad explicitly disconnected")
         except Exception as e:
             logger.warning("BleModeManager: macropad disconnect error: %s", e)
@@ -90,6 +91,7 @@ class BleModeManager:
         except Exception as e:
             logger.warning("BleModeManager: advertising start error: %s", e)
             self._mode = self.MODE_CENTRAL   # fallback
+            self._keypad.set_reconnect_enabled(True)
 
     def switch_to_central(self):
         """
@@ -103,6 +105,7 @@ class BleModeManager:
         self._mode = self.MODE_SWITCHING
         self._connected_at = 0
 
+        self._bridge.disconnect()
         try:
             self._bridge.stop_advertising()
         except Exception as e:
@@ -110,6 +113,7 @@ class BleModeManager:
 
         self._pending_packet = None
         self._mode = self.MODE_CENTRAL
+        self._keypad.set_reconnect_enabled(True)
         self._notify("central_ready")
         logger.info("BleModeManager: returned to central, macropad reconnects")
 
@@ -133,14 +137,16 @@ class BleModeManager:
         elapsed   = int(time.time() - self._peripheral_start)
         remaining = max(0, timeout_s - elapsed)
 
-        # --- Timeout: telefono non connesso entro il limite ---
-        if elapsed >= timeout_s and not self._bridge.is_connected():
-            logger.info("BleModeManager: timeout telefono, ritorno a centrale")
+        # The phone must complete the exchange within the total peripheral window.
+        if elapsed >= timeout_s:
+            logger.info("BleModeManager: peripheral timeout, returning to central")
             self.switch_to_central()
             return {"timeout": True}
 
+        connected = self._bridge.is_connected()
+
         # --- MAC Whitelist: controlla alla prima connessione ---
-        if self._bridge.is_connected() and not self._mac_checked:
+        if connected and not self._mac_checked:
             self._mac_checked = True
             allowed = CONFIG.get("PHONE_MAC", "").upper().strip()
             peer    = self._bridge.get_peer_addr_str()
@@ -151,7 +157,7 @@ class BleModeManager:
                 return {"countdown": remaining}
 
         # --- Invia pacchetto 2 SECONDI DOPO la negoziazione MTU ---
-        if self._bridge.is_connected():
+        if connected:
             if self._connected_at == 0:
                 self._connected_at = time.ticks_ms()
 
@@ -174,6 +180,8 @@ class BleModeManager:
                     logger.warning("BleModeManager: errore invio pacchetto: %s", e)
         else:
             self._connected_at = 0
+            if self._bridge.needs_advertise:
+                self._bridge.start_advertising()
 
         return {"countdown": remaining}
 

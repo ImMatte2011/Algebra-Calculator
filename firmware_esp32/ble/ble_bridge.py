@@ -42,7 +42,10 @@ class BLEBridge:
         result_char = (result_uuid, ubluetooth.FLAG_NOTIFY | ubluetooth.FLAG_READ)
         service = (service_uuid, (expr_char, result_char))
     
+        self.ble.config(mtu=256)
         ((self.expr_handle, self.result_handle),) = self.ble.gatts_register_services((service,))
+        self.ble.gatts_set_buffer(self.expr_handle, 256)
+        self.ble.gatts_set_buffer(self.result_handle, 256)
         logger.info("BLE Bridge initialized")
     
     def handle_irq(self, event, data):
@@ -52,23 +55,25 @@ class BLEBridge:
     def _advertise(self):
         name = CONFIG["BLE_NAME"]
         payload = b'\x02\x01\x06' + bytes([len(name) + 1]) + b'\x09' + name.encode()
-        self.ble.gap_advertise(100, payload)
+        self.ble.gap_advertise(100_000, payload)
         self.advertising = True
         self.last_advertise = time.time()
         self.needs_advertise = False
         logger.info("BLE advertising started")
 
     def start_advertising(self, force=False):
-        if self.phone_conn is not None:
+        if self.phone_conn is not None or self.advertising:
             return
 
         now = time.time()
-        if not force and self.advertising and now - self.last_advertise < self.advertise_interval:
+        if (not force and self.last_advertise
+                and now - self.last_advertise < self.advertise_interval):
             return
 
         try:
             self._advertise()
         except Exception as e:
+            self.last_advertise = now
             logger.warning("BLE advertising error: %s", e)
 
     def stop_advertising(self):
@@ -103,6 +108,7 @@ class BLEBridge:
         self.phone_conn = None
         self.advertising = False
         self.needs_advertise = True
+        self.last_advertise = 0
         self._peer_addr = None
         self.last_activity = time.time()
 
@@ -148,7 +154,9 @@ class BLEBridge:
             return
 
         if time.time() - self.last_activity > self.inactivity_timeout:
-            self._clear_connection_state("BLE inactivity timeout: internal disconnect")
+            logger.info("BLE inactivity timeout: disconnecting peer")
+            self.last_activity = time.time()
+            self.disconnect()
 
     def poll(self):
         self._check_inactivity()
@@ -162,7 +170,6 @@ class BLEBridge:
                 logger.warning("BLE payload decode error: %s", e)
 
     def is_connected(self):
-        self._check_inactivity()
         return self.phone_conn is not None
 
     def send_result(self, result_str):
@@ -178,4 +185,4 @@ class BLEBridge:
             logger.info("BLE notification sent: %s", result_str)
         except Exception as e:
             logger.warning("BLE send error: %s", e)
-            self._clear_connection_state("BLE send failed, internal disconnect")
+            self.disconnect()

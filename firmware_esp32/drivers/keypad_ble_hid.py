@@ -129,6 +129,8 @@ class KeypadBleHid(KeypadBase):
         self._conn              = None
         self._phase             = "idle"
         self._event_queue       = []
+        self._previous_keycodes = set()
+        self._reconnect_enabled = True
         self._cccd_queue        = []
         self._all_services      = []
         self._report_handles    = []
@@ -177,6 +179,7 @@ class KeypadBleHid(KeypadBase):
             elif event == self._IRQ_PERIPHERAL_DISCONNECT:
                 self._conn  = None
                 self._phase = "disconnected"
+                self._previous_keycodes = set()
                 self._last_disconnect_ms = time.ticks_ms()
                 logger.info("KeypadBleHid: disconnesso")
                 self._notify_state("disconnected")
@@ -220,7 +223,6 @@ class KeypadBleHid(KeypadBase):
 
             elif event == self._IRQ_GATTC_NOTIFY:
                 _, value_handle, notify_data = data
-                print("HANDLE:", value_handle, "RAW:", bytes(notify_data).hex())
                 self._handle_notify(bytes(notify_data))
 
             elif event == self._IRQ_ENCRYPTION_UPDATE:
@@ -260,7 +262,6 @@ class KeypadBleHid(KeypadBase):
             self._notify_state("ready")
 
     def _handle_notify(self, data):
-        print("PARSED:", data.hex())    # debug
         # HID report with Report ID: [report_id, modifier, reserved, key1..key6]
         if len(data) >= 4 and data[2] == 0x00:
             modifier = data[1]
@@ -273,9 +274,12 @@ class KeypadBleHid(KeypadBase):
             logger.debug("HID notify format unknown: %s", data)
             return
 
+        keycodes = set(kc for kc in key_bytes if kc != 0)
+        newly_pressed = keycodes - self._previous_keycodes
         for kc in key_bytes:
-            if kc != 0:
+            if kc in newly_pressed:
                 self._event_queue.append((kc, modifier))
+        self._previous_keycodes = keycodes
         # Other reports (boot mouse, proprietary knob data): not used
         # for now; the knobs already send standard keycodes handled above.
 
@@ -285,7 +289,7 @@ class KeypadBleHid(KeypadBase):
     def update(self):
         if self._phase == "disconnected":
             elapsed = time.ticks_diff(time.ticks_ms(), self._last_disconnect_ms)
-            if elapsed >= self.RECONNECT_DELAY_MS:
+            if self._reconnect_enabled and elapsed >= self.RECONNECT_DELAY_MS:
                 self._connect()
             return None
 
@@ -294,6 +298,9 @@ class KeypadBleHid(KeypadBase):
 
         keycode, modifier = self._event_queue.pop(0)
         return _decode(keycode, modifier)
+
+    def set_reconnect_enabled(self, enabled):
+        self._reconnect_enabled = bool(enabled)
 
     def is_ready(self):
         return self._phase == "ready"

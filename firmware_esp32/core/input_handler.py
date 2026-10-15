@@ -13,6 +13,8 @@ from drivers.keypad_base import KeypadAction
 class InputHandler:
     """Manages the expression state and prepares the data packet."""
 
+    MAX_EXPRESSION_LENGTH = 200
+
     # Interactive menu (used with the matrix keypad or with Layer 3 TYPE_EXPRESSION,
     # which still requires an action choice)
     REQUEST_TYPE_MENU = {
@@ -77,7 +79,8 @@ class InputHandler:
 
         # Square-root symbol handling (layer 2).
         if key == KeypadAction.SQRT:
-            self._insert_char("sqrt(")
+            if not self._insert_char("sqrt("):
+                return {"input_error": "expression_too_long"}
             return None
 
         # ---------------------------------------------------------------
@@ -127,7 +130,8 @@ class InputHandler:
                      KeypadAction.SHIFT_B):
             pass   # handled elsewhere or ignored
         elif isinstance(key, str):
-            self._insert_char(key)
+            if not self._insert_char(key):
+                return {"input_error": "expression_too_long"}
         return None
 
     # -----------------------------------------------------------------------
@@ -174,8 +178,11 @@ class InputHandler:
     # Editing helpers
     # -----------------------------------------------------------------------
     def _insert_char(self, char):
+        if len(self.expr) + len(char) > self.MAX_EXPRESSION_LENGTH:
+            return False
         self.expr = self.expr[:self.cursor_pos] + char + self.expr[self.cursor_pos:]
         self.cursor_pos = min(self.cursor_pos + len(char), len(self.expr))
+        return True
 
     def _delete_next(self):
         if self.cursor_pos < len(self.expr):

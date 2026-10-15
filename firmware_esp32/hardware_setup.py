@@ -9,6 +9,7 @@ Public API: get_hardware() -> (display, keypad, ble, mode_manager, wdt)
 
 import machine
 from config import CONFIG
+from utils.ble_secret_store import BLESecretStore
 
 
 def get_hardware():
@@ -76,6 +77,7 @@ def get_hardware():
             ble_instance=_ble,
             register_irq=False
         )
+        secret_store = BLESecretStore()
 
         _bridge_ref = [ble]
         keypad._bridge_ref = _bridge_ref
@@ -88,21 +90,17 @@ def get_hardware():
         _CENTRAL_EVENTS = frozenset(range(7, 19))
 
         def _on_ble_irq(event, data):
+            if event == 29:
+                return secret_store.get_secret(*data)
+            if event == 30:
+                return secret_store.set_secret(*data)
+
             if event in _CENTRAL_EVENTS:
                 keypad.handle_irq(event, data)
-            elif event in (28, 29, 30, 31):
-                # Eventi di sicurezza/pairing (Encryption, Secrets, Passkey)
-                # Cruciali per la tastiera HID. Li inoltriamo a entrambi in sicurezza.
-                try:
-                    keypad.handle_irq(event, data)
-                except Exception:
-                    pass
-                
+            elif event in (28, 31):
+                keypad.handle_irq(event, data)
                 if _bridge_ref[0] is not None:
-                    try:
-                        _bridge_ref[0].handle_irq(event, data)
-                    except Exception:
-                        pass
+                    _bridge_ref[0].handle_irq(event, data)
             elif _bridge_ref[0] is not None:
                 _bridge_ref[0].handle_irq(event, data)
 

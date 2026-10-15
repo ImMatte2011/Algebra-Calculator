@@ -111,6 +111,22 @@ check("SQRT returns None (normal editing)", result is None)
 check("cursor advances by 5 after SQRT",
       ih.cursor_pos == 6, f"pos={ih.cursor_pos}")
 
+# --- Expression length bound for BLE GATT payloads ---
+ih = fresh()
+for _ in range(ih.MAX_EXPRESSION_LENGTH):
+    ih.process_key("1")
+result = ih.process_key("2")
+check("expression length is bounded",
+      len(ih.expr) == ih.MAX_EXPRESSION_LENGTH, f"length={len(ih.expr)}")
+max_packet = ih.prepare_packet("inequality")
+check("maximum packet fits the BLE characteristic buffer",
+      len(str(max_packet)) <= 256,
+      f"packet length={len(str(max_packet))}")
+check("over-limit input reports an error",
+      isinstance(result, dict)
+      and result.get("input_error") == "expression_too_long",
+      f"got {result}")
+
 # --- Direct Layer 3 actions ---
 ih = fresh()
 for c in "x^2":
