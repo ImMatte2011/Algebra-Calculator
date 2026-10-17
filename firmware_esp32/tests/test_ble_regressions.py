@@ -27,7 +27,7 @@ except ImportError:
 
 from ble.ble_bridge import BLEBridge
 from ble.ble_mode_manager import BleModeManager
-from drivers.keypad_ble_hid import KeypadBleHid
+from drivers.keypad_ble_hid import KeypadBleHid, _decode
 from utils.ble_secret_store import BLESecretStore
 
 
@@ -58,6 +58,14 @@ class FakeBLE:
 
     def gatts_read(self, handle):
         return self.read_data
+
+
+def test_hid_map_supports_system_symbols_and_function_key():
+    from drivers.keypad_base import KeypadAction
+
+    assert _decode(0x33, 0) == ";"
+    assert _decode(0x1C, 0) == "y"
+    assert _decode(0x40, 0) == KeypadAction.FUNC
 
 
 def test_bridge_sets_mtu_buffers_and_advertises_idempotently():

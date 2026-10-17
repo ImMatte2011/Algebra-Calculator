@@ -3,20 +3,20 @@
 - [ ] documentazione che rimanda al repo BLE-HID-Analyzer per mappare e altro dispositivi BLE
 - [ ] CHANGELOG.md
 - [ ] supporto ESP32-S3 con host OTG
-- [ ] cronologia operazioni con scrolling verticale (utilizzando le frecce su e giù)
-- [ ] menu iniziale che chiede cosa si vuole fare
+- [x] cronologia operazioni (navigazione con frecce su e giù, in RAM)
+- [x] menu iniziale che chiede cosa si vuole fare
 
 ### A livello matematico:
-- [ ] sistemi di disequazioni
-- [ ] sistemi lineari di equazioni a due incognite
-- [ ] scomporre in fattori primi
-- [ ] mcm e MCD
-- [ ] matrici e determinanti
-- [ ] possibilità di mostrare i passaggi (helper)
-- [ ] funzioni programmabili personalizzate (in cui si può usare tutto ciò che c'è di matematico usato nel resto della calcolatrice)
+- [x] sistemi di disequazioni
+- [x] sistemi lineari di equazioni a due incognite
+- [x] scomporre in fattori primi
+- [x] mcm e MCD
+- [x] matrici e determinanti
+- [x] possibilità di mostrare i passaggi (helper)
+- [x] funzioni programmabili personalizzate (composizione con espressioni matematiche supportate)
 - [ ] tasti x funzioni trigonometriche, iperboliche e logaritmiche
 
 ### Rendering
-- [ ] formattazione da (-∞)∧(+∞) a \(\forall x \in \mathbb{R}\)
-- [ ] forse si può usare 'pretty_print' di SymPy
+- [x] formattazione da (-∞)∧(+∞) a \(\forall x \in \mathbb{R}\)
+- [x] formattazione SymPy pretty per API/app
 - [ ] usare LaTeX per display TFT

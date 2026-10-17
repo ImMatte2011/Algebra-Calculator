@@ -29,6 +29,7 @@ class KeypadAction:
 
     # Square-root action — inserts "sqrt(" into the expression
     SQRT = "CMD_SQRT"
+    FUNC = "CMD_FUNC"
 
     # For matrix keypad only (hardware double SHIFT)
     SHIFT_A   = "CMD_SHIFT_A"

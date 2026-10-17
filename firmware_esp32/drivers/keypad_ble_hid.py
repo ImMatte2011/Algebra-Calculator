@@ -44,6 +44,8 @@ _HID_CHAR = {
     0x27: ('0', ')'),   # SHIFT+0 → )
     0x36: (',', '<'),   # SHIFT+, → <
     0x37: ('.', '>'),   # SHIFT+. → >
+    0x33: (';', ':'),   # ; — system/matrix separator
+    0x1C: ('y', 'y'),   # second variable
     0x2E: ('=', '='),   # =
     0x1E: ('1', '!'),   # SHIFT+1 → !
 }
@@ -70,7 +72,8 @@ _HID_FN = {
     0x3D: KeypadAction.TYPE_EQUATION,     # F4
     0x3E: KeypadAction.TYPE_INEQUALITY,   # F5
     0x3F: KeypadAction.TYPE_EXPRESSION,   # F6
-    # F7-F16 (0x40-0x45, 0x68-0x6B): libere, aggiungere qui se servono
+    0x40: KeypadAction.FUNC,               # F7 — user function name
+    # F8-F16 (0x41-0x45, 0x68-0x6B): free
     0x6C: KeypadAction.SQRT,              # F17 — radice (remap nel tool)
 }
 

@@ -39,8 +39,8 @@ Mapping obtained and verified with `scripts/hid_mapper.py` on real hardware (see
 | 8 | Macro: `Shift+.` then `=` | `>=` |
 | 9 | Macro: `Shift+1` then `=` | `!=` |
 | 10 | `=` | |
-| 11 | *(free)* | |
-| 12 | *(free)* | |
+| 11 | `,` (comma key, not numpad) | Number and matrix element separator |
+| 12 | `;` | System and matrix row separator |
 | 13 | `LEFT` | left arrow |
 | 14 | `RIGHT` | right arrow |
 | 15 | `UP` | up arrow |
@@ -60,9 +60,13 @@ Mapping obtained and verified with `scripts/hid_mapper.py` on real hardware (see
 | 4 | F4 | Type: equation |
 | 5 | F5 | Type: inequality |
 | 6 | F6 | Type: expression (opens the action sub-menu) |
-| 7-16 | F7-F16 | *(free for future expansion)* |
+| 7 | `y` (letter key) | Second variable |
+| 8 | F7 | Insert/cycle a user-function name (`f(`, `g(`, `h(`) |
+| 9-16 | F8-F16 | *(free for future expansion)* |
 
-Pressing one of these keys prepares the packet and sends it directly, without going through the interactive menu (which remains available only for matrix keypad users).
+Pressing one of the direct action keys prepares the packet and sends it
+directly, without going through the interactive menu. F7 inserts the next
+user-function name into the expression.
 
 ## Rotary Knobs (×3)
 

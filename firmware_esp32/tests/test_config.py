@@ -38,6 +38,14 @@ for key in ("KEYPAD_TYPE", "DISPLAY_TYPE",
             "BLE_NAME", "BLE_SERVICE_UUID",
             "BLE_EXPR_CHAR_UUID", "BLE_RESULT_CHAR_UUID"):
     check(f"CONFIG has '{key}'", key in CONFIG)
+check("HISTORY_SIZE is a positive int",
+      isinstance(CONFIG.get("HISTORY_SIZE"), int) and CONFIG["HISTORY_SIZE"] >= 1)
+check("SHIFT_A_MAP exposes system/matrix separators",
+      CONFIG["KEYPAD"]["SHIFT_A_MAP"].get("K_9") == ","
+      and CONFIG["KEYPAD"]["SHIFT_A_MAP"].get("K_0") == ";")
+check("SHIFT_A_MAP exposes y and SHIFT_B_MAP exposes FUNC",
+      CONFIG["KEYPAD"]["SHIFT_A_MAP"].get("K_DELETE") == "y"
+      and CONFIG["KEYPAD"]["SHIFT_B_MAP"].get("K_DELETE") == "CMD_FUNC")
 
 # KEYPAD_TYPE
 kt = CONFIG.get("KEYPAD_TYPE", "")

@@ -16,6 +16,13 @@ from hardware_setup import get_hardware
 
 
 class CalculatorApp:
+    _MODE_TAGS = {
+        "algebra": "",
+        "system": "SYS ",
+        "number": "NUM ",
+        "matrix": "MAT ",
+        "function": "FN ",
+    }
 
     def __init__(self, display, keypad, ble, mode_manager, wdt):
         self.display      = display
@@ -24,7 +31,7 @@ class CalculatorApp:
         self.mode_manager = mode_manager # BleModeManager or None
         self.wdt          = wdt
 
-        self.input_handler = InputHandler()
+        self.input_handler = InputHandler(CONFIG.get("HISTORY_SIZE", 10))
         self.scroller      = TextScroller(display.cols)
 
         # Result slot written by the BLE callback (IRQ context).
@@ -56,11 +63,21 @@ class CalculatorApp:
                             is_menu, menu_top, menu_bottom)
 
     def _status_line(self):
+        history_status = self.input_handler.history_status()
+        if history_status:
+            return history_status
+        tag = self._MODE_TAGS.get(self.input_handler.mode, "")
         if CONFIG["KEYPAD_TYPE"] == "matrix":
-            if getattr(self.keypad, "shift_mode", None) == "A": return "[SH-A]"
-            if getattr(self.keypad, "shift_mode", None) == "B": return "[SH-B]"
-            return ""
-        return "KP:OK" if self.keypad.is_ready() else "KP:..."
+            if getattr(self.keypad, "shift_mode", None) == "A":
+                return tag + "[SH-A]"
+            if getattr(self.keypad, "shift_mode", None) == "B":
+                return tag + "[SH-B]"
+            return tag.strip()
+        return tag + ("KP:OK" if self.keypad.is_ready() else "KP:...")
+
+    def _show_mode_menu(self):
+        self._awaiting_input = False
+        self._handle_menu(self.input_handler.open_mode_menu())
 
     def _show_waiting_prompt(self):
         rows = getattr(self.display, "rows", 2)
@@ -84,9 +101,7 @@ class CalculatorApp:
                 self.ble.start_advertising(force=True)
         if CONFIG["KEYPAD_TYPE"] == "matrix":
             self._kp_was_ready   = True
-            self._awaiting_input = True
-            self.display.clear()
-            self._show_waiting_prompt()
+            self._show_mode_menu()
 
         self._run_sync()
 
@@ -112,9 +127,8 @@ class CalculatorApp:
         else:
             if not self._kp_was_ready and self.keypad.is_ready():
                 self._kp_was_ready   = True
-                self._awaiting_input = True
                 self.display.clear()
-                self._show_waiting_prompt()
+                self._show_mode_menu()
 
             if self.mode_manager is not None:
                 poll_info = self.mode_manager.poll()
@@ -159,7 +173,7 @@ class CalculatorApp:
                          status=self._status_line(), result=result_text)
             time.sleep_ms(2000)
             if self.wdt: self.wdt.feed()
-        elif msg.startswith("err:") or msg.startswith("error:"):
+        elif msg.startswith(("error:", "err:")):
             self._render(self.input_handler.expr, self.input_handler.cursor_pos,
                          status="ERROR: " + msg.split(":", 1)[1])
             time.sleep_ms(2000)
@@ -275,12 +289,20 @@ class CalculatorApp:
 
         elif result.get("menu_error") == "select_type":
             pt, _ = self.input_handler.get_menu_prompt()
-            self._render("", 0, is_menu=True, menu_top=pt, menu_bottom="Choose 1-3")
+            self._render("", 0, is_menu=True, menu_top=pt,
+                         menu_bottom="Choose 1-{}".format(self.input_handler.menu_size()))
+
+        elif result.get("mode_changed"):
+            self._render(self.input_handler.expr, self.input_handler.cursor_pos,
+                         status=self._status_line())
 
     # -----------------------------------------------------------------------
     # _update_display(): refresh expression line after a normal keypress
     # -----------------------------------------------------------------------
     def _update_display(self, key):
+        if self.input_handler.waiting_menu:
+            return
+
         # First character typed clears the waiting prompt.
         if self._awaiting_input and not self._first_input and isinstance(key, str):
             self._first_input    = True

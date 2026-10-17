@@ -90,6 +90,7 @@ class KeypadMatrix(KeypadBase):
             "CMD_RIGHT": KeypadAction.RIGHT,
             "CMD_UP": KeypadAction.UP,
             "CMD_DOWN": KeypadAction.DOWN,
+            "CMD_FUNC": KeypadAction.FUNC,
         }
 
         if mapped in cmd_map:

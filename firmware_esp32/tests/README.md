@@ -11,7 +11,7 @@ su PC con Python 3.
 |---|---|
 | `test_config.py` | Struttura e validità di `config.py` |
 | `test_glyphs.py` | `oled_glyphs.split_with_glyphs()` — segmentazione e bitmap |
-| `test_input_handler.py` | `InputHandler` — editing, limite espressione, cursore, menu, azioni Layer 3, SQRT |
+| `test_input_handler.py` | `InputHandler` — editing, cronologia, modalità, menu, funzioni, SQRT |
 | `test_tft_link.py` | Protocollo UART/framing tra la ESP32 logica e quella TFT |
 | `test_ble_regressions.py` | Regressioni BLE, keypad matrix, LCD e gestione input (pytest su PC) |
 

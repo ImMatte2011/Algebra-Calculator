@@ -54,8 +54,8 @@ def check(name, condition, detail=""):
         print(f"  FAIL  {name}" + (f" — {detail}" if detail else ""))
         _fail += 1
 
-def fresh():
-    return InputHandler()
+def fresh(history_size=10):
+    return InputHandler(history_size)
 
 print("\n=== test_input_handler ===")
 
@@ -205,6 +205,65 @@ for c in "hello":
 ih.reset()
 check("reset clears expr", ih.expr == "")
 check("reset closes the menu", not ih.waiting_menu)
+
+# --- History and modes ---
+def solved(ih, expr, req_type, action, result):
+    ih.reset()
+    for char in expr:
+        ih.process_key(char)
+    ih.prepare_packet(req_type, act=action)
+    ih.store_local_result(result)
+    ih.reset()
+
+ih = fresh()
+solved(ih, "x^2-1", "equation", None, "-1, 1")
+solved(ih, "x>2", "inequality", None, "(2,+oo)")
+for char in "x+":
+    ih.process_key(char)
+ih.process_key(KeypadAction.UP)
+check("UP loads newest history entry", ih.expr == "x>2")
+check("history status includes result",
+      ih.history_status() == "H1/2 (2,+oo)", ih.history_status())
+ih.process_key(KeypadAction.UP)
+check("UP loads older history entry", ih.expr == "x^2-1")
+ih.process_key(KeypadAction.DOWN)
+ih.process_key(KeypadAction.DOWN)
+check("DOWN restores the unsent draft", ih.expr == "x+")
+check("history status clears after browsing", ih.history_status() == "")
+ih.process_key(KeypadAction.UP)
+ih.process_key("1")
+check("typing recalled history exits browsing",
+      ih.history_status() == "" and ih.expr == "x>21", ih.expr)
+
+ih = fresh(3)
+for value in range(5):
+    solved(ih, str(value), "equation", None, str(value))
+check("history behaves as a bounded ring",
+      len(ih.history) == 3 and ih.history.get(0)[0] == "4")
+
+ih = fresh()
+ih.open_mode_menu()
+check("mode menu fits a 16-column display",
+      ih.get_menu_prompt() == ("1=alg 2=sys", "3=num 4=mat 5=fn"),
+      str(ih.get_menu_prompt()))
+ih.process_key("4")
+result = ih.process_key(KeypadAction.ENTER)
+check("mode selection enters matrix mode",
+      result == {"mode_changed": "matrix"} and ih.mode == "matrix")
+for char in "1,2;3,4":
+    ih.process_key(char)
+ih.process_key(KeypadAction.ENTER)
+ih.process_key("1")
+result = ih.process_key(KeypadAction.ENTER)
+check("matrix menu prepares determinant packet",
+      result == ("1,2;3,4", "matrix", "det", None), str(result))
+
+ih = fresh()
+ih.process_key("2")
+ih.process_key(KeypadAction.FUNC)
+check("FUNC inserts f(", ih.expr == "2f(", ih.expr)
+ih.process_key(KeypadAction.FUNC)
+check("FUNC cycles to g(", ih.expr == "2g(", ih.expr)
 
 print(f"\n  {_pass} passed, {_fail} failed")
 sys.exit(0 if _fail == 0 else 1)
