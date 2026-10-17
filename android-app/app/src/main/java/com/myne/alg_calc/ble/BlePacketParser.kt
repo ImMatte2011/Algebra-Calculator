@@ -27,6 +27,10 @@ data class ParsedBlePacket(
 class BlePacketParseException(message: String) : Exception(message)
 
 object BlePacketParser {
+    private val VALID_TYPES = setOf(
+        "expression", "equation", "inequality",
+        "ineq_system", "lin_system", "number", "matrix", "function"
+    )
 
     fun parse(raw: String): ParsedBlePacket {
         val trimmed = raw.trim()
@@ -52,12 +56,8 @@ object BlePacketParser {
             throw BlePacketParseException("Empty expression after parsing. Raw: \"$raw\"")
         }
 
-        val type = when {
-            rawType.equals("expression", ignoreCase = true) -> "expression"
-            rawType.equals("inequality", ignoreCase = true) -> "inequality"
-            rawType.equals("equation", ignoreCase = true) -> "equation"
-            else -> throw BlePacketParseException("Unknown type: \"$rawType\". Raw: \"$raw\"")
-        }
+        val type = rawType.lowercase().takeIf { it in VALID_TYPES }
+            ?: throw BlePacketParseException("Unknown type: \"$rawType\". Raw: \"$raw\"")
 
         return ParsedBlePacket(expression = expression, type = type, action = action)
     }

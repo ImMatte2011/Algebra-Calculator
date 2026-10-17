@@ -131,6 +131,19 @@ class BlePacketParserTest {
         assertNull(result.action)
     }
 
+    @Test
+    fun `parse new request types`() {
+        val matrix = BlePacketParser.parse("('1,2;3,4', 'matrix', 'det', None)")
+        assertEquals("matrix", matrix.type)
+        assertEquals("det", matrix.action)
+        assertEquals("1,2;3,4", matrix.expression)
+
+        val system = BlePacketParser.parse(
+            "('x+y=3;x-y=1', 'lin_system', None, None)"
+        )
+        assertEquals("lin_system", system.type)
+    }
+
     // -------------------------------------------------------------------------
     // Type normalization
     // -------------------------------------------------------------------------

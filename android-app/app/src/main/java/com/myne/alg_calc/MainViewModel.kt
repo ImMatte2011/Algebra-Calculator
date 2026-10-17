@@ -157,7 +157,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 addLog(LogType.NET_OUT, "Sending to RPi: ${parsed.expression}")
                 val response = apiService.solveExpression(
-                    MathRequest(expression = parsed.expression, type = parsed.type, action = parsed.action)
+                    MathRequest(
+                        expression = parsed.expression,
+                        type = parsed.type,
+                        action = parsed.action,
+                        steps = true
+                    )
                 )
                 _uiState.value = _uiState.value.copy(rpiStatus = RpiStatus.REACHABLE)
 
@@ -165,6 +170,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     addLog(LogType.ERROR, "RPi responded with error: ${response.error}")
                     bleManager.sendData("err:${response.error}")
                 } else {
+                    response.steps?.forEach { addLog(LogType.INFO, "Step: $it") }
                     val result = response.result ?: ""
                     addLog(LogType.NET_IN, "RPi response: $result")
                     val resPacket = "res:$result"
@@ -172,10 +178,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     bleManager.sendData(resPacket)
                 }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(rpiStatus = RpiStatus.UNREACHABLE)
+                val http = e as? HttpException
+                _uiState.value = _uiState.value.copy(
+                    rpiStatus = if (http != null) RpiStatus.REACHABLE else RpiStatus.UNREACHABLE
+                )
                 val description = describeNetworkError(e)
                 addLog(LogType.ERROR, "Network error: $description")
-                bleManager.sendData("err:RPiOff")
+                bleManager.sendData(
+                    when {
+                        http?.code() == 400 -> "err:BadExpr"
+                        http != null -> "err:HTTP${http.code()}"
+                        else -> "err:RPiOff"
+                    }
+                )
             }
         }
     }

@@ -9,7 +9,8 @@ import com.google.gson.annotations.SerializedName
 data class MathRequest(
     @SerializedName("expression") val expression: String,
     @SerializedName("type") val type: String,
-    @SerializedName("action") val action: String? = null
+    @SerializedName("action") val action: String? = null,
+    @SerializedName("steps") val steps: Boolean = false
 )
 
 /**
@@ -17,5 +18,6 @@ data class MathRequest(
  */
 data class MathResponse(
     @SerializedName("result") val result: String? = null,
-    @SerializedName("error") val error: String? = null
+    @SerializedName("error") val error: String? = null,
+    @SerializedName("steps") val steps: List<String>? = null
 )
