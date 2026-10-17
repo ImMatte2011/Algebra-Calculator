@@ -8,6 +8,8 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    volumes:
+      - ./data:/app/data
   # volumes:
   #   - ./backend_rpi4:/app/backend_rpi4
 

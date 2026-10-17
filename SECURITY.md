@@ -40,7 +40,7 @@ The backend supports two mutually exclusive access modes, set via
 | `public` *(default)* | Public internet via Caddy HTTPS on `:443` | Yes — `API_TOKEN` on every request |
 | `tailscale` | Tailscale tailnet only | No — tailnet is the perimeter |
 
-In `public` mode, all three endpoints (`/solve`, `/status`) require a
+In `public` mode, both endpoints (`/solve` and `/status`) require a
 valid `Authorization: Bearer <token>` header. The token is validated in
 `backend_rpi4/utils/validators.py`. Starting the server in production
 (`ENV=production`) with a default or empty token raises an error at
@@ -53,18 +53,21 @@ is not checked, but the perimeter is the tailnet access control.
 ### API input validation
 
 The `/solve` endpoint accepts a mathematical expression string and passes
-it through SymPy's parser (`backend_rpi4/math_engine/parser.py`). The
-parser uses SymPy's `parse_expr` with explicit transformation rules — it
-does **not** use `eval()` or `exec()`. Arbitrary code execution via the
-expression field is not possible through this path.
+it through SymPy's `parse_expr` (`backend_rpi4/math_engine/parser.py`).
+`parse_expr` evaluates generated Python internally; it is **not** a safe
+parser or a security boundary. This project applies a character allowlist
+and a 120-character limit before parsing, but these measures do not replace
+authentication or isolation. Keep public access behind the configured
+bearer token and HTTPS proxy, and do not expose this parser as an
+unauthenticated general-purpose service.
 
 Known limitations:
-- Very long or deeply nested expressions can cause high CPU usage on the
-  Pi (SymPy is not bounded in time). Rate limiting at the proxy level
+- Expressions within the length limit can still cause high CPU usage on
+  the Pi (SymPy is not bounded in time). Rate limiting at the proxy level
   (Caddy middleware or `slowapi`) is recommended before exposing this
   publicly.
-- The parser only handles single-variable expressions in `x`. Expressions
-  with other variable names or multi-variable inputs return an error.
+- The parser and SymPy solver are not sandboxed or bounded in time. The
+  allowlist limits syntax, not computation cost.
 
 ### BLE communication (ESP32 ↔ Android)
 

@@ -1,6 +1,8 @@
 # FastAPI Server — Algebra Calculator (backend_rpi4)
 
-FastAPI server that receives an expression/equation/inequality and returns the result computed with SymPy. Designed to run on Raspberry Pi 4 behind an HTTPS reverse proxy (see [deploy.md](deploy.md) and [network.md](network.md)).
+FastAPI server that receives mathematical requests and returns SymPy results.
+It is designed to run on Raspberry Pi 4 behind an HTTPS reverse proxy (see
+[deploy.md](deploy.md) and [network.md](network.md)).
 
 ## Installation
 
@@ -14,18 +16,13 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Copy the example file and edit the values:
+Copy `.env.example` to `.env` and configure `API_TOKEN`, `ACCESS_MODE`, and
+`FUNCTIONS_FILE`. See [deploy.md](deploy.md) for access-mode guidance.
+The server reads environment variables via `python-dotenv`.
 
-```bash
-cp .env.example .env
-# then edit .env: API_TOKEN, ACCESS_MODE, API_HOST, API_PORT, LOG_LEVEL
-```
-
-For ESP32 devices, copy `.env.esp32.example` instead and follow [esp32_settings.md](esp32_settings.md).
-
-The server reads configuration from environment variables via `python-dotenv` (see `backend_rpi4/config.py`): no need to modify the code directly.
-
-`ACCESS_MODE` (`public` by default, or `tailscale`) determines whether the Bearer token is required — details in [deploy.md](deploy.md#access-public-vs-tailscale). In production (`ENV=production`) with `ACCESS_MODE=public`, startup intentionally fails if `API_TOKEN` has not been changed from its default value.
+`FUNCTIONS_FILE` defaults to `data/functions.json`. The Docker Compose
+configuration mounts `./data` so saved user functions survive container
+recreation. Back up this directory if you rely on custom functions.
 
 ## Start (development)
 
@@ -37,20 +34,37 @@ uvicorn backend_rpi4.main:app --reload --host 127.0.0.1 --port 8000
 
 - `POST /solve` — body:
   ```json
-  { "expression": "x^2-1=0", "type": "equation", "action": null }
+  {
+    "expression": "x^2-1=0",
+    "type": "equation",
+    "action": null,
+    "format": "plain",
+    "steps": false
+  }
   ```
-  - `type`: `"expression"`, `"equation"` or `"inequality"`
-  - `action` (only for `type: "expression"`): `"simplify"`, `"expand"` or `"factor"`
-- `POST /toggle` — body: `{ "active": true|false }`, enables/disables the service
-- `GET /status` — returns `{ "is_active": true|false }`
+  - `type` / `action`: `expression` (`simplify`, `expand`, `factor`), `equation`,
+    `inequality`, `ineq_system`, `lin_system`, `number` (`primes`, `gcd`, `lcm`),
+    `matrix` (`det`, `inv`, `trans`), or `function` (`define`, `list`, `delete`)
+  - `format`: `plain` (default), `latex`, or `pretty`
+  - `steps: true` adds solution steps to the response
+  - Input is limited to 120 characters from lowercase letters, digits, and
+    mathematical operators/delimiters
+- Systems use `;` between equations/inequalities; number lists accept `,` or
+  `;`; matrices use comma-separated cells and semicolon-separated rows.
+- Define a stored function with an expression such as `f(x)=x^2+1`, then call
+  it from later expressions; `function` actions also support `list` and
+  `delete`.
+- Responses contain `ok`, a `result` string prefixed with `result:`, and a
+  `steps` array (empty unless requested).
+- `GET /status` — returns `{ "status": "ok" }`
 
-All three require the `Authorization: Bearer <token>` header when `ACCESS_MODE=public` (default). When `ACCESS_MODE=tailscale` the check is skipped.
+Both endpoints require the configured bearer token when `ACCESS_MODE=public`
+(default). When `ACCESS_MODE=tailscale`, token checking is skipped.
 
-> Note: `is_active` is a **global** state, shared by all clients — disabling the service disables it for everyone, not just the caller of `/toggle`. This is fine for personal use; if the service becomes multi-user in the future it will need to be made per-user/per-token.
+## Math engine notes
 
-## Notes on the Math Engine
-
-The engine (`backend_rpi4/math_engine/`) **does not handle integrals or derivatives**: requests containing them return an error.
+Equations and inequalities are solved over the reals; linear systems are
+limited to variables `x` and `y`. Integrals and derivatives are not supported.
 
 ## Tests
 
