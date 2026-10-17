@@ -53,3 +53,30 @@ def test_solve_inequality():
     )
     assert response.status_code == 200
     assert "1" in response.json()["result"]
+
+
+def test_solve_supports_format_and_steps():
+    client = TestClient(app)
+    response = client.post(
+        "/solve",
+        json={
+            "expression": "x^2-1=0",
+            "type": "equation",
+            "format": "latex",
+            "steps": True,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["result"].startswith("result:")
+    assert body["steps"]
+
+
+def test_solve_rejects_unsupported_format():
+    response = TestClient(app).post(
+        "/solve",
+        json={"expression": "x", "type": "expression", "action": "simplify",
+              "format": "unknown"},
+    )
+    assert response.status_code == 400

@@ -1,10 +1,10 @@
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from .math_engine.engine import solve_expression
+from .math_engine.engine import solve_detailed
 from .utils.logger import info
 from .utils.validators import verify_bearer_token
 
@@ -16,21 +16,22 @@ async def lifespan(app: FastAPI):
     info("Stopping Algebra Calculator API")
 
 
-app = FastAPI(
-    title="Algebra Calculator API",
-    lifespan=lifespan,
-)
+app = FastAPI(title="Algebra Calculator API", lifespan=lifespan)
 
 
 class SolveRequest(BaseModel):
     expression: str
     type: str
     action: Optional[str] = None
+    format: str = "plain"
+    steps: bool = False
+    x_value: Optional[float] = None
 
 
 class SolveResponse(BaseModel):
     ok: bool
     result: str
+    steps: List[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
@@ -39,19 +40,21 @@ class HealthResponse(BaseModel):
 
 @app.post("/solve", response_model=SolveResponse)
 def solve(request: SolveRequest, token: str = Depends(verify_bearer_token)):
-    result = solve_expression(
+    output = solve_detailed(
         request.expression,
         request.type,
-        request.action
+        request.action,
+        x_value=request.x_value,
+        fmt=request.format,
+        steps=request.steps,
     )
-
-    if result is None or result.startswith("error:"):
-        raise HTTPException(
-            status_code=400,
-            detail=result or "Unable to solve expression"
-        )
-
-    return SolveResponse(ok=True, result=result)
+    if "error" in output:
+        raise HTTPException(status_code=400, detail="error:{}".format(output["error"]))
+    return SolveResponse(
+        ok=True,
+        result="result:{}".format(output["result"]),
+        steps=output["steps"],
+    )
 
 
 @app.get("/status", response_model=HealthResponse)
